@@ -137,9 +137,10 @@ Vercel 프로젝트 설정 변경:
 
 | 앱 | Vercel 프로젝트 | 도메인 |
 |---|---|---|
-| apps/admin | `amakers-admin` | `admin.amakers.co.kr` |
-| apps/marketing | `amakers-marketing` | `marketing.amakers.co.kr` |
-| apps/design | `amakers-design` | `design.amakers.co.kr` |
+| apps/admin | `amakers-admin` | `adminbot.amakers.co.kr` |
+| apps/marketing | `amakers-marketing` | `marketingbot.amakers.co.kr` |
+| apps/design | `amakers-design` | `designbot.amakers.co.kr` |
+| apps/mockup | `amakers-mockup` | `mockupbot.amakers.co.kr` |
 
 각 프로젝트는 같은 `DATABASE_URL` 환경변수 공유.
 

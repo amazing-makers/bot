@@ -7,9 +7,9 @@
 ```
 amakers-platform/
 ├── apps/
-│   ├── admin/        ← 슈퍼관리자 대시보드 (admin.amakers.co.kr)
-│   ├── marketing/    ← 마케팅봇 (marketing.amakers.co.kr) — c:\marketingbot 에서 이전 예정
-│   └── design/       ← 디자인봇 (design.amakers.co.kr) — 추후
+│   ├── admin/        ← 슈퍼관리자 대시보드 (adminbot.amakers.co.kr)
+│   ├── marketing/    ← 마케팅봇 (marketingbot.amakers.co.kr) — c:\marketingbot 에서 이전 예정
+│   └── design/       ← 디자인봇 (designbot.amakers.co.kr) — 추후
 └── packages/
     ├── db/           ← 공통 Prisma 스키마 + 클라이언트 (@amakers/db)
     ├── auth/         ← 공통 NextAuth 설정 (@amakers/auth)
@@ -21,14 +21,15 @@ amakers-platform/
 ## 도메인 전략
 
 ```
-amakers.co.kr             — 랜딩 (별도 정적 사이트 또는 apps/landing)
-admin.amakers.co.kr       — apps/admin
-marketing.amakers.co.kr   — apps/marketing
-design.amakers.co.kr      — apps/design
-reseller.amakers.co.kr    — apps/marketing 의 /reseller 또는 별도 앱
+amakers.co.kr               — 아임웹 랜딩 (그대로 유지, 건드리지 않음)
+adminbot.amakers.co.kr      — apps/admin (슈퍼관리자)
+marketingbot.amakers.co.kr  — apps/marketing
+designbot.amakers.co.kr     — apps/design (예정)
+mockupbot.amakers.co.kr     — apps/mockup (예정)
+# 리셀러 페이지는 marketingbot 내 /dashboard/reseller 라우트 사용 (별도 서브도메인 안 만듦)
 ```
 
-DNS: `*.amakers.co.kr → Vercel` 와일드카드. Vercel 프로젝트 N개를 한 도메인에 매핑.
+DNS: Cloudflare 에서 각 서브도메인을 CNAME 으로 `cname.vercel-dns.com` 매핑. ⚠️ 루트 `amakers.co.kr` 은 아임웹이 사용 중이라 건드리지 말 것. 자세한 단계는 [DEPLOY.md](./DEPLOY.md) 참고.
 
 ## 시작하기
 

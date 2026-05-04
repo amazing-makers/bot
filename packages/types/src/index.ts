@@ -9,7 +9,7 @@ export interface BotMeta {
     kind: BotKind;
     title: string;
     description: string;
-    domain: string;             // 예: 'marketing.amakers.co.kr'
+    domain: string;             // 예: 'marketingbot.amakers.co.kr'
     appPath: string;            // 예: 'apps/marketing'
     enabled: boolean;
     pricingTiers?: PricingTier[];

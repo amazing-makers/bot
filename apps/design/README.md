@@ -1,4 +1,4 @@
-# apps/design — 디자인봇 (예정)
+# apps/design — 디자인봇 (예정, designbot.amakers.co.kr)
 
 **비유:** Figma·미리캔버스·Canva 같은 디자인 툴 + AI 자동 생성.
 

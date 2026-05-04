@@ -122,7 +122,7 @@ export default async function AdminHome() {
                             kind="marketing"
                             title="마케팅봇"
                             desc="SNS·블로그 자동 발행, AI 캡션·이미지 생성"
-                            domain="marketing.amakers.co.kr"
+                            domain="marketingbot.amakers.co.kr"
                             status="LIVE"
                             users={stats.totalUsers}
                         />
@@ -130,7 +130,7 @@ export default async function AdminHome() {
                             kind="design"
                             title="디자인봇"
                             desc="AI 디자인 템플릿 + 캔버스 에디터"
-                            domain="design.amakers.co.kr"
+                            domain="designbot.amakers.co.kr"
                             status="PLANNED"
                             users={0}
                         />
@@ -138,7 +138,7 @@ export default async function AdminHome() {
                             kind="mockup"
                             title="목업봇"
                             desc="인쇄 출력 전 목업 미리보기 (티셔츠·머그·포스터 등)"
-                            domain="mockup.amakers.co.kr"
+                            domain="mockupbot.amakers.co.kr"
                             status="PLANNED"
                             users={0}
                         />
