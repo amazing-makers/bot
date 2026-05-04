@@ -1,0 +1,25 @@
+{
+  "name": "amakers-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Amakers multi-bot platform: marketing, design, mockup bots + admin + reseller",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:admin": "npm run dev --workspace=@amakers/admin",
+    "dev:marketing": "npm run dev --workspace=@amakers/marketing",
+    "build": "npm run build --workspaces --if-present",
+    "build:admin": "npm run build --workspace=@amakers/admin",
+    "build:marketing": "npm run build --workspace=@amakers/marketing",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run generate --workspace=@amakers/db",
+    "db:migrate": "npm run migrate --workspace=@amakers/db",
+    "db:studio": "npm run studio --workspace=@amakers/db"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

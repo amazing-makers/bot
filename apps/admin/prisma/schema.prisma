@@ -1,0 +1,155 @@
+// Admin 앱 read-only 미러 스키마.
+// 같은 Supabase DB 를 가리키되, admin 이 필요한 모델만 정의.
+// marketingbot 의 schema 가 source-of-truth — 변경 시 동기화 필요.
+//
+// ⚠️ 마이그레이션 (prisma migrate dev) 절대 실행 금지! 읽기 전용 + 신규 모델만 추가.
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────────────────────────────────────
+//  기존 marketingbot 모델 (read-only 미러 — 컬럼은 필요한 것만)
+// ───────────────────────────────────────────────────────────
+
+model User {
+  id                    String    @id
+  email                 String    @unique
+  name                  String?
+  role                  String    @default("USER")
+  onboardingCompletedAt DateTime?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  // 리셀러 추천 (다-1 에서 marketingbot 스키마에도 동일 필드 추가 예정)
+  referredByCodeId String?
+  referredByCode   ReferralCode? @relation("ReferredByCode", fields: [referredByCodeId], references: [id])
+  reseller         Reseller?
+
+  subscription Subscription?
+  campaigns    Campaign[]
+  series       CampaignSeries[]
+  channels     MarketingChannel[]
+
+  @@map("User")
+}
+
+model Subscription {
+  id                   String    @id
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id])
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  plan                 String    @default("FREE")
+  status               String    @default("active")
+  currentPeriodEnd     DateTime?
+  trialEndsAt          DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime
+  updatedAt            DateTime
+
+  @@map("Subscription")
+}
+
+model Campaign {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  status    String
+  createdAt DateTime
+  updatedAt DateTime
+
+  @@map("Campaign")
+}
+
+model CampaignSeries {
+  id             String   @id
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  name           String
+  status         String
+  totalPosts     Int
+  completedPosts Int      @default(0)
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@map("CampaignSeries")
+}
+
+model MarketingChannel {
+  id          String   @id
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String
+  accountName String
+  status      String
+  createdAt   DateTime
+
+  @@map("MarketingChannel")
+}
+
+// ───────────────────────────────────────────────────────────
+//  신규 모델 — admin / reseller 전용 (다-1)
+// ───────────────────────────────────────────────────────────
+
+model Reseller {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  name            String
+  contactEmail    String
+  taxStatus       String   @default("INDIVIDUAL")  // INDIVIDUAL | BUSINESS
+  businessNumber  String?
+  bankAccount     String?
+  commissionRate  Float    @default(0.10)
+  status          String   @default("ACTIVE")     // ACTIVE | SUSPENDED
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  referralCodes ReferralCode[]
+  commissions   ReferralCommission[]
+
+  @@map("Reseller")
+}
+
+model ReferralCode {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  resellerId  String
+  reseller    Reseller @relation(fields: [resellerId], references: [id])
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  referrals User[] @relation("ReferredByCode")
+
+  @@index([resellerId])
+  @@map("ReferralCode")
+}
+
+model ReferralCommission {
+  id              String    @id @default(cuid())
+  resellerId      String
+  reseller        Reseller  @relation(fields: [resellerId], references: [id])
+  referredUserId  String
+  periodYearMonth String                                       // "2026-05"
+  baseRevenue     Decimal   @db.Decimal(12, 2)
+  commissionRate  Float
+  amount          Decimal   @db.Decimal(12, 2)
+  status          String    @default("PENDING")                // PENDING | PAID | CANCELLED
+  paidAt          DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([resellerId, referredUserId, periodYearMonth])
+  @@index([resellerId, status])
+  @@map("ReferralCommission")
+}
