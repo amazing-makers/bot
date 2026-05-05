@@ -35,6 +35,7 @@ model User {
   campaigns    Campaign[]
   series       CampaignSeries[]
   channels     MarketingChannel[]
+  feedbacks    UserFeedback[]
 
   @@map("User")
 }
@@ -154,4 +155,17 @@ model ReferralCommission {
   @@unique([resellerId, referredUserId, periodYearMonth])
   @@index([resellerId, status])
   @@map("ReferralCommission")
+}
+
+// Phase 25 미러 — 사용자 피드백 (admin read-only)
+model UserFeedback {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  rating    Int
+  comment   String?
+  context   String?
+  createdAt DateTime
+
+  @@map("UserFeedback")
 }
