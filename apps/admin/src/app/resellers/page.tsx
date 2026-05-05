@@ -3,7 +3,7 @@ import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import {
-    Container, Title, Text, Stack, Paper, Group, Anchor, Table, Badge, Button,
+    Title, Text, Stack, Paper, Group, Anchor, Table, Badge, Button,
 } from '@mantine/core';
 import Link from 'next/link';
 import dayjs from 'dayjs';
@@ -24,15 +24,11 @@ export default async function ResellersPage() {
     }).catch(() => [] as any[]); // 마이그레이션 전이면 빈 배열
 
     return (
-        <Container size="xl" py="xl">
-            <Stack gap="md">
-                <Group justify="space-between">
-                    <Stack gap={2}>
-                        <Anchor component={Link} href="/" size="sm">← 대시보드</Anchor>
-                        <Title order={2}>🤝 리셀러 관리 ({resellers.length}명)</Title>
-                    </Stack>
-                    <Button component={Link} href="/resellers/new" color="violet">+ 새 리셀러 등록</Button>
-                </Group>
+        <Stack gap="md">
+            <Group justify="space-between">
+                <Title order={2}>🤝 리셀러 관리 ({resellers.length}명)</Title>
+                <Button component={Link} href="/resellers/new" color="violet">+ 새 리셀러 등록</Button>
+            </Group>
 
                 {resellers.length === 0 && (
                     <Paper withBorder p="xl" radius="md">
@@ -99,8 +95,7 @@ export default async function ResellersPage() {
                             </Table.Tbody>
                         </Table>
                     </Paper>
-                )}
-            </Stack>
-        </Container>
+            )}
+        </Stack>
     );
 }

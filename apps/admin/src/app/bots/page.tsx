@@ -1,9 +1,8 @@
 import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
-import { Container, Title, Text, Stack, Paper, Anchor, SimpleGrid, Badge, Group, ThemeIcon } from '@mantine/core';
+import { Title, Text, Stack, Paper, SimpleGrid, Badge, Group, ThemeIcon } from '@mantine/core';
 import { IconRobot, IconBolt, IconSpeakerphone } from '@tabler/icons-react';
-import Link from 'next/link';
 
 export default async function BotsPage() {
     const session = await auth();
@@ -43,13 +42,11 @@ export default async function BotsPage() {
     ];
 
     return (
-        <Container size="xl" py="xl">
-            <Stack gap="md">
-                <Stack gap={2}>
-                    <Anchor component={Link} href="/" size="sm">← 대시보드</Anchor>
-                    <Title order={2}>🤖 봇 레지스트리</Title>
-                    <Text c="dimmed" size="sm">멀티봇 플랫폼 — 각 봇은 별도 서브도메인 + 별도 Vercel 프로젝트로 배포</Text>
-                </Stack>
+        <Stack gap="md">
+            <Stack gap={2}>
+                <Title order={2}>🤖 봇 레지스트리</Title>
+                <Text c="dimmed" size="sm">멀티봇 플랫폼 — 각 봇은 별도 서브도메인 + 별도 Vercel 프로젝트로 배포</Text>
+            </Stack>
 
                 <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
                     {bots.map(b => (
@@ -83,8 +80,7 @@ export default async function BotsPage() {
                         3. Vercel 에 새 프로젝트 등록 + 도메인 <code>&lt;bot-name&gt;.amakers.co.kr</code> 매핑<br />
                         4. <code>packages/types/src/index.ts</code> 의 <code>BotKind</code> 에 추가
                     </Text>
-                </Paper>
-            </Stack>
-        </Container>
+            </Paper>
+        </Stack>
     );
 }

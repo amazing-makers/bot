@@ -3,14 +3,15 @@ import { isAdminEmail } from '@amakers/auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import {
-    Container, Title, Text, Stack, Group, Paper, Badge, Anchor, SimpleGrid, ThemeIcon, Card, Table, Box, Divider,
+    Title, Text, Stack, Group, Paper, Badge, Anchor, SimpleGrid, ThemeIcon, Card, Table, Box,
 } from '@mantine/core';
 import {
-    IconUser, IconMail, IconCash, IconSpeakerphone, IconBolt, IconWorld,
-    IconCalendar, IconCoin, IconRosetteDiscountCheck, IconAlertCircle,
+    IconUser, IconCash, IconSpeakerphone, IconBolt, IconWorld,
+    IconCalendar, IconCoin,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
+import AdminActionsPanel from './AdminActionsPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,12 +61,11 @@ export default async function UserDetailPage({ params }: PageProps) {
     const wasReferred = !!user.referredByCode;
 
     return (
-        <Container size="xl" py="xl">
-            <Stack gap="md">
-                {/* 헤더 */}
-                <Stack gap={2}>
-                    <Anchor component={Link} href="/users" size="sm">← 사용자 목록</Anchor>
-                    <Group gap="sm" align="center">
+        <Stack gap="md">
+            {/* 헤더 */}
+            <Stack gap={2}>
+                <Anchor component={Link} href="/users" size="sm">← 사용자 목록</Anchor>
+                <Group gap="sm" align="center">
                         <ThemeIcon size={48} radius="xl" variant="light" color="blue"><IconUser size={28} /></ThemeIcon>
                         <Stack gap={0}>
                             <Title order={2}>{user.name || user.email}</Title>
@@ -82,6 +82,14 @@ export default async function UserDetailPage({ params }: PageProps) {
                         </Stack>
                     </Group>
                 </Stack>
+
+                {/* Phase 31 — 관리자 액션 패널 */}
+                <AdminActionsPanel
+                    userId={user.id}
+                    userEmail={user.email}
+                    stripeCustomerId={user.subscription?.stripeCustomerId || null}
+                    hasActiveSub={!!user.subscription && user.subscription.status === 'active'}
+                />
 
                 {/* 핵심 지표 */}
                 <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
@@ -229,9 +237,8 @@ export default async function UserDetailPage({ params }: PageProps) {
                             </Table.Tbody>
                         </Table>
                     </Paper>
-                )}
-            </Stack>
-        </Container>
+            )}
+        </Stack>
     );
 }
 

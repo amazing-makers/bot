@@ -3,10 +3,9 @@ import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import {
-    Container, Title, Text, Stack, SimpleGrid, Paper, Group, ThemeIcon, Anchor, Table, Badge,
+    Title, Text, Stack, SimpleGrid, Paper, Group, ThemeIcon, Table, Badge, Box,
 } from '@mantine/core';
-import { IconCash, IconTrendingUp, IconUsers } from '@tabler/icons-react';
-import Link from 'next/link';
+import { IconCash, IconTrendingUp, IconUsers, IconUserOff, IconUsersGroup } from '@tabler/icons-react';
 import dayjs from 'dayjs';
 import BarChart from '@/components/BarChart';
 
@@ -86,21 +85,134 @@ async function getMonthlyTimeSeries() {
     }));
 }
 
+// Phase 31 — 가입 코호트별 잔존율
+//   각 가입 월 → 그 월 가입자 중 N개월 후 활성 상태인 비율.
+//   "활성" = 캠페인 N개월 내 createdAt OR 구독 active.
+async function getCohortRetention() {
+    const now = dayjs();
+    const months: Array<{ ymKey: string; label: string; startsAt: Date; endsAt: Date }> = [];
+    for (let i = 5; i >= 0; i--) {
+        const d = now.subtract(i, 'month').startOf('month');
+        months.push({
+            ymKey: d.format('YYYY-MM'),
+            label: d.format('YY/MM'),
+            startsAt: d.toDate(),
+            endsAt: d.endOf('month').toDate(),
+        });
+    }
+
+    const earliest = months[0].startsAt;
+    const cohortUsers = await prisma.user.findMany({
+        where: { createdAt: { gte: earliest } },
+        select: {
+            id: true,
+            createdAt: true,
+            subscription: { select: { status: true, plan: true } },
+            campaigns: {
+                where: { createdAt: { gte: earliest } },
+                select: { createdAt: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+            },
+        },
+    });
+
+    return months.map(m => {
+        const cohort = cohortUsers.filter(u =>
+            u.createdAt >= m.startsAt && u.createdAt <= m.endsAt,
+        );
+        const total = cohort.length;
+        const months1 = m.startsAt;
+        const month1End = dayjs(m.startsAt).add(1, 'month').endOf('month').toDate();
+        const month3End = dayjs(m.startsAt).add(3, 'month').endOf('month').toDate();
+
+        const active1m = cohort.filter(u => {
+            const last = u.campaigns[0]?.createdAt;
+            return last && last >= months1 && last <= month1End;
+        }).length;
+        const active3m = cohort.filter(u => {
+            const last = u.campaigns[0]?.createdAt;
+            if (last && last >= months1 && last <= month3End) return true;
+            return u.subscription?.status === 'active' && u.subscription.plan !== 'FREE';
+        }).length;
+        const stillPaying = cohort.filter(u =>
+            u.subscription?.status === 'active' && u.subscription.plan !== 'FREE',
+        ).length;
+
+        return {
+            label: m.label,
+            total,
+            active1m,
+            active3m,
+            stillPaying,
+            retention1m: total > 0 ? Math.round((active1m / total) * 100) : 0,
+            retention3m: total > 0 ? Math.round((active3m / total) * 100) : 0,
+            payingRate: total > 0 ? Math.round((stillPaying / total) * 100) : 0,
+        };
+    });
+}
+
+// Phase 31 — 처닝 분석: 취소된 구독 + 14일+ 무활동 유료 사용자
+async function getChurnStats() {
+    const now = new Date();
+    const cancelled30d = await prisma.subscription.findMany({
+        where: {
+            OR: [
+                { status: { in: ['cancelled', 'canceled'] } },
+                { cancelAtPeriodEnd: true, status: 'active' },
+            ],
+            updatedAt: { gte: dayjs(now).subtract(30, 'day').toDate() },
+        },
+        include: {
+            user: { select: { id: true, email: true, name: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 30,
+    });
+
+    const fourteenDaysAgo = dayjs(now).subtract(14, 'day').toDate();
+    const inactivePaidUsers = await prisma.user.findMany({
+        where: {
+            subscription: {
+                status: 'active',
+                plan: { not: 'FREE' },
+            },
+            campaigns: {
+                none: { createdAt: { gte: fourteenDaysAgo } },
+            },
+        },
+        select: {
+            id: true,
+            email: true,
+            name: true,
+            subscription: { select: { plan: true, currentPeriodEnd: true } },
+            campaigns: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { createdAt: true },
+            },
+        },
+        take: 30,
+    });
+
+    return { cancelled30d, inactivePaidUsers };
+}
+
 export default async function RevenuePage() {
     const session = await auth();
     if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
 
-    const { byPlan, totalMrr, subs } = await getRevenueStats();
-    const monthlyData = await getMonthlyTimeSeries();
+    const [{ byPlan, totalMrr, subs }, monthlyData, cohorts, churn] = await Promise.all([
+        getRevenueStats(),
+        getMonthlyTimeSeries(),
+        getCohortRetention(),
+        getChurnStats(),
+    ]);
     const arr = totalMrr * 12;
 
     return (
-        <Container size="xl" py="xl">
-            <Stack gap="md">
-                <Stack gap={2}>
-                    <Anchor component={Link} href="/" size="sm">← 대시보드</Anchor>
-                    <Title order={2}>💰 매출·정산</Title>
-                </Stack>
+        <Stack gap="md">
+            <Title order={2}>💰 매출·정산</Title>
 
                 <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
                     <Paper withBorder p="lg" radius="md">
@@ -142,6 +254,122 @@ export default async function RevenuePage() {
                     </Group>
                     <BarChart data={monthlyData} height={180} />
                 </Paper>
+
+                {/* Phase 31 — 코호트 잔존율 */}
+                <Paper withBorder p="md" radius="md">
+                    <Group gap={6} mb="sm">
+                        <IconUsersGroup size={18} />
+                        <Text fw={700}>📈 가입 코호트 잔존율 (최근 6개월)</Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" mb="md">
+                        각 가입 월의 사용자가 1개월 / 3개월 후 활성 상태인 비율 + 현재 유료 구독 중인 비율
+                    </Text>
+                    <Table.ScrollContainer minWidth={600}>
+                        <Table>
+                            <Table.Thead>
+                                <Table.Tr>
+                                    <Table.Th>가입 월</Table.Th>
+                                    <Table.Th>가입자 수</Table.Th>
+                                    <Table.Th>1개월 활성</Table.Th>
+                                    <Table.Th>3개월 활성</Table.Th>
+                                    <Table.Th>현재 유료</Table.Th>
+                                </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {cohorts.map(c => (
+                                    <Table.Tr key={c.label}>
+                                        <Table.Td><Text fw={600}>{c.label}</Text></Table.Td>
+                                        <Table.Td><Text size="sm">{c.total}명</Text></Table.Td>
+                                        <Table.Td>
+                                            <RetentionCell pct={c.retention1m} count={c.active1m} />
+                                        </Table.Td>
+                                        <Table.Td>
+                                            <RetentionCell pct={c.retention3m} count={c.active3m} />
+                                        </Table.Td>
+                                        <Table.Td>
+                                            <RetentionCell pct={c.payingRate} count={c.stillPaying} />
+                                        </Table.Td>
+                                    </Table.Tr>
+                                ))}
+                            </Table.Tbody>
+                        </Table>
+                    </Table.ScrollContainer>
+                </Paper>
+
+                {/* Phase 31 — 처닝 분석 */}
+                <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+                    <Paper withBorder p="md" radius="md">
+                        <Group gap={6} mb="sm">
+                            <IconUserOff size={18} color="var(--mantine-color-red-6)" />
+                            <Text fw={700}>⛔ 최근 30일 처닝</Text>
+                            <Badge size="sm" color="red" variant="light">{churn.cancelled30d.length}건</Badge>
+                        </Group>
+                        {churn.cancelled30d.length === 0 ? (
+                            <Text size="sm" c="dimmed" ta="center" py="md">처닝 없음 ✨</Text>
+                        ) : (
+                            <Stack gap="xs">
+                                {churn.cancelled30d.slice(0, 10).map(s => (
+                                    <Box key={s.id} style={{
+                                        padding: 8,
+                                        borderLeft: '3px solid var(--mantine-color-red-5)',
+                                        background: 'var(--mantine-color-default-hover)',
+                                        borderRadius: 4,
+                                    }}>
+                                        <Group justify="space-between" wrap="nowrap">
+                                            <Stack gap={0}>
+                                                <Text size="xs" fw={600} truncate>{s.user.email}</Text>
+                                                <Text size="11px" c="dimmed">
+                                                    {s.plan} · {s.cancelAtPeriodEnd ? '기간 만료 시 취소' : '즉시 취소'}
+                                                </Text>
+                                            </Stack>
+                                            <Text size="11px" c="dimmed">{dayjs(s.updatedAt).format('M.D')}</Text>
+                                        </Group>
+                                    </Box>
+                                ))}
+                            </Stack>
+                        )}
+                    </Paper>
+
+                    <Paper withBorder p="md" radius="md">
+                        <Group gap={6} mb="sm">
+                            <IconUserOff size={18} color="var(--mantine-color-orange-6)" />
+                            <Text fw={700}>⚠️ 14일+ 무활동 유료 사용자</Text>
+                            <Badge size="sm" color="orange" variant="light">{churn.inactivePaidUsers.length}명</Badge>
+                        </Group>
+                        <Text size="11px" c="dimmed" mb="xs">
+                            처닝 위험군 — 직접 연락하거나 리마인드 이메일 발송 검토
+                        </Text>
+                        {churn.inactivePaidUsers.length === 0 ? (
+                            <Text size="sm" c="dimmed" ta="center" py="md">전원 활동 중 🎉</Text>
+                        ) : (
+                            <Stack gap="xs">
+                                {churn.inactivePaidUsers.slice(0, 10).map(u => {
+                                    const lastActive = u.campaigns[0]?.createdAt;
+                                    return (
+                                        <Box key={u.id} style={{
+                                            padding: 8,
+                                            borderLeft: '3px solid var(--mantine-color-orange-5)',
+                                            background: 'var(--mantine-color-default-hover)',
+                                            borderRadius: 4,
+                                        }}>
+                                            <Group justify="space-between" wrap="nowrap">
+                                                <Stack gap={0}>
+                                                    <Text size="xs" fw={600} truncate>{u.email}</Text>
+                                                    <Text size="11px" c="dimmed">
+                                                        {u.subscription?.plan} · 마지막 활동 {lastActive ? dayjs(lastActive).format('YY-MM-DD') : '없음'}
+                                                    </Text>
+                                                </Stack>
+                                                <Badge size="xs" variant="outline" color="orange">
+                                                    {lastActive ? `${dayjs().diff(lastActive, 'day')}일` : '무'}
+                                                </Badge>
+                                            </Group>
+                                        </Box>
+                                    );
+                                })}
+                            </Stack>
+                        )}
+                    </Paper>
+                </SimpleGrid>
 
                 <Paper withBorder p="md" radius="md">
                     <Text fw={700} mb="sm">📊 플랜별 분포</Text>
@@ -191,8 +419,28 @@ export default async function RevenuePage() {
                             ))}
                         </Table.Tbody>
                     </Table>
-                </Paper>
-            </Stack>
-        </Container>
+            </Paper>
+        </Stack>
+    );
+}
+
+function RetentionCell({ pct, count }: { pct: number; count: number }) {
+    const color = pct >= 70 ? 'teal' : pct >= 40 ? 'blue' : pct >= 20 ? 'orange' : 'red';
+    return (
+        <Group gap={6} wrap="nowrap">
+            <Box style={{
+                background: `var(--mantine-color-${color}-1)`,
+                color: `var(--mantine-color-${color}-9)`,
+                padding: '2px 8px',
+                borderRadius: 4,
+                fontWeight: 700,
+                fontSize: 12,
+                minWidth: 44,
+                textAlign: 'center',
+            }}>
+                {pct}%
+            </Box>
+            <Text size="xs" c="dimmed">({count}명)</Text>
+        </Group>
     );
 }

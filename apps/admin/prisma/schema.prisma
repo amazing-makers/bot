@@ -59,13 +59,14 @@ model Subscription {
 }
 
 model Campaign {
-  id        String   @id
+  id        String          @id
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User            @relation(fields: [userId], references: [id])
   name      String
   status    String
   createdAt DateTime
   updatedAt DateTime
+  tasks     ScheduledTask[]
 
   @@map("Campaign")
 }
@@ -85,17 +86,66 @@ model CampaignSeries {
 }
 
 model MarketingChannel {
-  id          String   @id
+  id          String          @id
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
   type        String
   accountName String
   status      String
   region      String?
   language    String?
   createdAt   DateTime
+  tasks       ScheduledTask[]
 
   @@map("MarketingChannel")
+}
+
+// Phase 31 — 운영 현황 위젯용 미러 (read-only)
+model ScheduledTask {
+  id          String           @id
+  campaignId  String
+  campaign    Campaign         @relation(fields: [campaignId], references: [id])
+  channelId   String
+  channel     MarketingChannel @relation(fields: [channelId], references: [id])
+  agentId     String?
+  content     String
+  status      String
+  scheduledAt DateTime
+  executedAt  DateTime?
+  errorLog    String?
+  createdAt   DateTime
+  updatedAt   DateTime
+
+  @@map("ScheduledTask")
+  @@index([status])
+  @@index([executedAt])
+}
+
+model AgentInstance {
+  id         String   @id
+  userId     String
+  machineId  String   @unique
+  name       String?
+  version    String
+  os         String?
+  lastSeenAt DateTime
+  createdAt  DateTime
+
+  @@map("AgentInstance")
+  @@index([lastSeenAt])
+}
+
+model License {
+  id         String    @id
+  userId     String
+  key        String    @unique
+  plan       String
+  validUntil DateTime?
+  createdAt  DateTime
+  updatedAt  DateTime
+
+  @@map("License")
+  @@index([userId])
 }
 
 // ───────────────────────────────────────────────────────────
@@ -168,4 +218,29 @@ model UserFeedback {
   createdAt DateTime
 
   @@map("UserFeedback")
+}
+
+// Phase 31 — admin 액션 감사 로그 (admin 앱 전용 테이블, write 가능)
+//
+// admin 슈퍼유저의 모든 mutating 액션 기록:
+//   - TRIAL_EXTEND, PLAN_OVERRIDE, USER_SUSPEND, USER_DELETE, RESELLER_CREATE/UPDATE,
+//     COMMISSION_PAID, IMPERSONATE 등.
+// 사용처: /audit 페이지 + GDPR 감사 + 보안 사고 추적.
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminEmail   String   // 액션 수행한 admin 이메일
+  action       String   // TRIAL_EXTEND, PLAN_OVERRIDE, etc.
+  targetType   String?  // user | reseller | subscription | campaign
+  targetId     String?  // 대상 레코드 id
+  targetLabel  String?  // 사람이 읽기 위한 라벨 (예: 사용자 이메일, 리셀러 이름)
+  metadata     Json?    // 추가 컨텍스트 (이전 값, 새 값, 사유 등)
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([adminEmail])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("AdminAuditLog")
 }

@@ -3,9 +3,12 @@ import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import {
-    Container, Title, Text, SimpleGrid, Paper, Group, ThemeIcon, Stack, Anchor, Badge,
+    Title, Text, SimpleGrid, Paper, Group, ThemeIcon, Stack, Anchor, Badge, Progress, Box,
 } from '@mantine/core';
-import { IconUsers, IconChartBar, IconRobot, IconCash, IconBolt, IconSpeakerphone } from '@tabler/icons-react';
+import {
+    IconUsers, IconChartBar, IconRobot, IconCash, IconBolt, IconSpeakerphone,
+    IconActivity, IconAlertTriangle, IconClock, IconUserPlus,
+} from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 
@@ -13,33 +16,65 @@ async function getStats() {
     const now = new Date();
     const monthStart = dayjs(now).startOf('month').toDate();
     const lastMonthStart = dayjs(monthStart).subtract(1, 'month').toDate();
+    const day24hAgo = dayjs(now).subtract(24, 'hour').toDate();
+    const dayStart = dayjs(now).startOf('day').toDate();
+    const fiveMinAgo = dayjs(now).subtract(5, 'minute').toDate();
 
     const [
         totalUsers,
         newUsersThisMonth,
         newUsersLastMonth,
+        newUsers24h,
         activeSubscriptions,
         totalChannels,
         totalCampaigns,
         runningSeries,
+        // Phase 31 — 운영 현황
+        todaySuccess,
+        todayFailed,
+        activeAgents,
+        recentErrorTasks,
     ] = await Promise.all([
         prisma.user.count(),
         prisma.user.count({ where: { createdAt: { gte: monthStart } } }),
         prisma.user.count({ where: { createdAt: { gte: lastMonthStart, lt: monthStart } } }),
+        prisma.user.count({ where: { createdAt: { gte: day24hAgo } } }),
         prisma.subscription.count({ where: { status: 'active', plan: { not: 'FREE' } } }),
         prisma.marketingChannel.count(),
         prisma.campaign.count(),
         prisma.campaignSeries.count({ where: { status: 'RUNNING' } }),
+        prisma.scheduledTask.count({ where: { status: 'SUCCESS', executedAt: { gte: dayStart } } }),
+        prisma.scheduledTask.count({ where: { status: 'FAILED', executedAt: { gte: dayStart } } }),
+        prisma.agentInstance.count({ where: { lastSeenAt: { gte: fiveMinAgo } } }),
+        prisma.scheduledTask.findMany({
+            where: { status: 'FAILED', executedAt: { gte: day24hAgo } },
+            orderBy: { executedAt: 'desc' },
+            take: 5,
+            include: {
+                campaign: { select: { name: true, user: { select: { email: true } } } },
+                channel: { select: { type: true } },
+            },
+        }),
     ]);
+
+    const todayTotal = todaySuccess + todayFailed;
+    const todaySuccessRate = todayTotal > 0 ? Math.round((todaySuccess / todayTotal) * 100) : 0;
 
     return {
         totalUsers,
         newUsersThisMonth,
         newUsersLastMonth,
+        newUsers24h,
         activeSubscriptions,
         totalChannels,
         totalCampaigns,
         runningSeries,
+        todaySuccess,
+        todayFailed,
+        todayTotal,
+        todaySuccessRate,
+        activeAgents,
+        recentErrorTasks,
     };
 }
 
@@ -71,18 +106,103 @@ export default async function AdminHome() {
         : `${Math.round(((stats.newUsersThisMonth - stats.newUsersLastMonth) / stats.newUsersLastMonth) * 100)}% MoM`;
 
     return (
-        <Container size="xl" py="xl">
-            <Stack gap="xl">
-                <Group justify="space-between" align="flex-end">
-                    <Stack gap={2}>
-                        <Title order={1}>🛠 Amakers 관리자 대시보드</Title>
-                        <Text c="dimmed" size="sm">로그인: {session.user.email}</Text>
-                    </Stack>
-                    <Badge size="lg" color="violet" variant="light">SUPER ADMIN</Badge>
-                </Group>
+        <Stack gap="xl">
+            <Group justify="space-between" align="flex-end">
+                <Stack gap={2}>
+                    <Title order={2}>🛠 운영 대시보드</Title>
+                    <Text c="dimmed" size="sm">전체 플랫폼 핵심 지표 + 운영 현황 + 봇 레지스트리</Text>
+                </Stack>
+                <Badge size="lg" color="violet" variant="light">SUPER ADMIN</Badge>
+            </Group>
 
-                <Stack gap={6}>
-                    <Title order={3}>📊 핵심 지표</Title>
+            {/* Phase 31 — 운영 현황 (실시간) */}
+            <Stack gap={6}>
+                <Group justify="space-between">
+                    <Title order={3}>⚡ 운영 현황 (실시간)</Title>
+                    <Text size="xs" c="dimmed">방금 갱신됨 · 페이지 새로고침으로 업데이트</Text>
+                </Group>
+                <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+                    <Paper withBorder p="lg" radius="md">
+                        <Group gap="sm" mb="sm">
+                            <ThemeIcon size={36} radius="md" variant="light" color="green"><IconUserPlus size={20} /></ThemeIcon>
+                            <Text size="sm" c="dimmed" fw={600}>24시간 신규 가입</Text>
+                        </Group>
+                        <Text size="28px" fw={800}>{stats.newUsers24h}</Text>
+                        <Text size="xs" c="dimmed" mt={4}>이번 달 누적 {stats.newUsersThisMonth}명</Text>
+                    </Paper>
+                    <Paper withBorder p="lg" radius="md">
+                        <Group gap="sm" mb="sm">
+                            <ThemeIcon size={36} radius="md" variant="light" color={stats.todaySuccessRate >= 90 ? 'teal' : stats.todaySuccessRate >= 70 ? 'orange' : 'red'}>
+                                <IconActivity size={20} />
+                            </ThemeIcon>
+                            <Text size="sm" c="dimmed" fw={600}>오늘 발행 성공률</Text>
+                        </Group>
+                        <Text size="28px" fw={800}>{stats.todaySuccessRate}%</Text>
+                        <Progress value={stats.todaySuccessRate} size="xs" mt={6} color={stats.todaySuccessRate >= 90 ? 'teal' : stats.todaySuccessRate >= 70 ? 'orange' : 'red'} />
+                        <Text size="xs" c="dimmed" mt={4}>✓ {stats.todaySuccess} / ✗ {stats.todayFailed} (총 {stats.todayTotal}건)</Text>
+                    </Paper>
+                    <Paper withBorder p="lg" radius="md">
+                        <Group gap="sm" mb="sm">
+                            <ThemeIcon size={36} radius="md" variant="light" color={stats.activeAgents > 0 ? 'teal' : 'gray'}>
+                                <IconRobot size={20} />
+                            </ThemeIcon>
+                            <Text size="sm" c="dimmed" fw={600}>활성 에이전트</Text>
+                        </Group>
+                        <Text size="28px" fw={800}>{stats.activeAgents}</Text>
+                        <Text size="xs" c="dimmed" mt={4}>5분 내 heartbeat</Text>
+                    </Paper>
+                    <Paper withBorder p="lg" radius="md">
+                        <Group gap="sm" mb="sm">
+                            <ThemeIcon size={36} radius="md" variant="light" color={stats.recentErrorTasks.length > 5 ? 'red' : stats.recentErrorTasks.length > 0 ? 'orange' : 'gray'}>
+                                <IconAlertTriangle size={20} />
+                            </ThemeIcon>
+                            <Text size="sm" c="dimmed" fw={600}>24시간 오류 발행</Text>
+                        </Group>
+                        <Text size="28px" fw={800}>{stats.recentErrorTasks.length}+</Text>
+                        <Text size="xs" c="dimmed" mt={4}>최근 5건만 표시</Text>
+                    </Paper>
+                </SimpleGrid>
+
+                {/* 최근 오류 task 5건 */}
+                {stats.recentErrorTasks.length > 0 && (
+                    <Paper withBorder p="md" radius="md" mt="xs">
+                        <Group gap={6} mb="sm">
+                            <IconAlertTriangle size={16} color="var(--mantine-color-red-6)" />
+                            <Text fw={700} size="sm">최근 발행 실패 (24시간)</Text>
+                        </Group>
+                        <Stack gap={4}>
+                            {stats.recentErrorTasks.map(t => (
+                                <Box key={t.id} style={{
+                                    padding: 8,
+                                    borderLeft: '3px solid var(--mantine-color-red-6)',
+                                    background: 'var(--mantine-color-default-hover)',
+                                    borderRadius: 4,
+                                }}>
+                                    <Group justify="space-between" wrap="nowrap" gap="md">
+                                        <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                                            <Group gap={6} wrap="nowrap">
+                                                <Badge size="xs" variant="outline" color="gray">{t.channel.type}</Badge>
+                                                <Text size="xs" fw={600} truncate>{t.campaign.name}</Text>
+                                            </Group>
+                                            <Text size="11px" c="red.7" lineClamp={1}>
+                                                {t.errorLog?.slice(0, 200) || '오류 로그 없음'}
+                                            </Text>
+                                            <Text size="10px" c="dimmed">{t.campaign.user.email}</Text>
+                                        </Stack>
+                                        <Group gap={3}>
+                                            <IconClock size={11} color="var(--mantine-color-dimmed)" />
+                                            <Text size="11px" c="dimmed">{t.executedAt ? dayjs(t.executedAt).format('HH:mm') : '-'}</Text>
+                                        </Group>
+                                    </Group>
+                                </Box>
+                            ))}
+                        </Stack>
+                    </Paper>
+                )}
+            </Stack>
+
+            <Stack gap={6}>
+                <Title order={3}>📊 핵심 지표</Title>
                     <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
                         <StatCard
                             icon={IconUsers}
@@ -145,17 +265,16 @@ export default async function AdminHome() {
                     </SimpleGrid>
                 </Stack>
 
-                <Stack gap={6}>
-                    <Title order={3}>🔧 빠른 작업</Title>
-                    <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
-                        <QuickLink href="/users" icon={IconUsers} label="사용자 관리" />
-                        <QuickLink href="/resellers" icon={IconChartBar} label="리셀러 관리" />
-                        <QuickLink href="/revenue" icon={IconCash} label="매출·정산" />
-                        <QuickLink href="/bots" icon={IconRobot} label="봇 설정" />
-                    </SimpleGrid>
-                </Stack>
+            <Stack gap={6}>
+                <Title order={3}>🔧 빠른 작업</Title>
+                <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+                    <QuickLink href="/users" icon={IconUsers} label="사용자 관리" />
+                    <QuickLink href="/resellers" icon={IconChartBar} label="리셀러 관리" />
+                    <QuickLink href="/revenue" icon={IconCash} label="매출·정산" />
+                    <QuickLink href="/bots" icon={IconRobot} label="봇 설정" />
+                </SimpleGrid>
             </Stack>
-        </Container>
+        </Stack>
     );
 }
 

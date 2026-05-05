@@ -3,31 +3,31 @@ import '@mantine/dates/styles.css';
 import '@mantine/notifications/styles.css';
 
 import type { Metadata } from 'next';
-import { ColorSchemeScript, MantineProvider, createTheme } from '@mantine/core';
-import { Notifications } from '@mantine/notifications';
-import { AMAKERS_BRAND } from '@amakers/ui';
+import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core';
+import Providers from '@/components/Providers';
+import AdminShell from '@/components/AdminShell';
+import { auth } from '@/auth';
+import { isAdminEmail } from '@amakers/auth';
 
 export const metadata: Metadata = {
     title: 'Amakers Admin',
     description: '슈퍼관리자 대시보드',
 };
 
-const theme = createTheme({
-    primaryColor: AMAKERS_BRAND.primaryColor,
-    defaultRadius: AMAKERS_BRAND.radius,
-});
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+    const session = await auth();
+    // 인증된 admin 만 shell 적용. 비인증/비admin 은 layout 없이 raw 렌더 (login 페이지용).
+    const isAuthed = session?.user && isAdminEmail(session.user.email);
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="ko" suppressHydrationWarning>
+        <html lang="ko" {...mantineHtmlProps}>
             <head>
-                <ColorSchemeScript />
+                <ColorSchemeScript defaultColorScheme="auto" />
             </head>
             <body>
-                <MantineProvider theme={theme}>
-                    <Notifications position="top-right" />
-                    {children}
-                </MantineProvider>
+                <Providers>
+                    {isAuthed ? <AdminShell>{children}</AdminShell> : children}
+                </Providers>
             </body>
         </html>
     );

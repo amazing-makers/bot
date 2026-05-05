@@ -3,10 +3,9 @@ import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import {
-    Container, Title, Text, Stack, SimpleGrid, Paper, Group, Badge, Anchor, Box, Table, ThemeIcon,
+    Title, Text, Stack, SimpleGrid, Paper, Group, Badge, Box, Table,
 } from '@mantine/core';
 import { IconMessage, IconStar } from '@tabler/icons-react';
-import Link from 'next/link';
 import dayjs from 'dayjs';
 import BarChart from '@/components/BarChart';
 
@@ -45,13 +44,11 @@ export default async function FeedbackPage() {
     const withComments = all.filter(f => f.comment?.trim());
 
     return (
-        <Container size="xl" py="xl">
-            <Stack gap="md">
-                <Stack gap={2}>
-                    <Anchor component={Link} href="/" size="sm">← 대시보드</Anchor>
-                    <Group gap={6}><IconMessage size={24} /><Title order={2}>💬 사용자 피드백</Title></Group>
-                    <Text size="sm" c="dimmed">최근 200개 피드백 — 5점 평가 + 코멘트</Text>
-                </Stack>
+        <Stack gap="md">
+            <Stack gap={2}>
+                <Group gap={6}><IconMessage size={24} /><Title order={2}>💬 사용자 피드백</Title></Group>
+                <Text size="sm" c="dimmed">최근 200개 피드백 — 5점 평가 + 코멘트</Text>
+            </Stack>
 
                 <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
                     <KpiCard label="평균 평점" value={`${avg}/5`} hint={`${total}건 누적`} color="yellow" />
@@ -128,9 +125,8 @@ export default async function FeedbackPage() {
                             </Table.Tbody>
                         </Table>
                     </Paper>
-                )}
-            </Stack>
-        </Container>
+            )}
+        </Stack>
     );
 }
 

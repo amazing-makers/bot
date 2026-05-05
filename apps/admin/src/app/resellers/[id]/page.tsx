@@ -2,7 +2,7 @@ import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import { Container, Stack } from '@mantine/core';
+import { Stack } from '@mantine/core';
 import ResellerDetailClient from './ResellerDetailClient';
 
 export const dynamic = 'force-dynamic';
@@ -81,10 +81,8 @@ export default async function ResellerDetailPage({ params }: PageProps) {
     };
 
     return (
-        <Container size="xl" py="xl">
-            <Stack gap="md">
-                <ResellerDetailClient data={data} />
-            </Stack>
-        </Container>
+        <Stack gap="md">
+            <ResellerDetailClient data={data} />
+        </Stack>
     );
 }
