@@ -90,6 +90,8 @@ model MarketingChannel {
   type        String
   accountName String
   status      String
+  region      String?
+  language    String?
   createdAt   DateTime
 
   @@map("MarketingChannel")

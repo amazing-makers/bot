@@ -8,6 +8,7 @@ import {
 import { IconCash, IconTrendingUp, IconUsers } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
+import BarChart from '@/components/BarChart';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ async function getRevenueStats() {
             plan: true,
             stripeCustomerId: true,
             currentPeriodEnd: true,
+            createdAt: true,
             user: { select: { email: true, name: true, createdAt: true } },
         },
     });
@@ -43,11 +45,53 @@ async function getRevenueStats() {
     return { byPlan, totalMrr, subs };
 }
 
+// 최근 12개월 시계열 데이터 (신규 구독 + 신규 사용자)
+async function getMonthlyTimeSeries() {
+    const now = new Date();
+    const months: Array<{ label: string; ymKey: string }> = [];
+    for (let i = 11; i >= 0; i--) {
+        const d = dayjs(now).subtract(i, 'month');
+        months.push({ label: d.format('YY/MM'), ymKey: d.format('YYYY-MM') });
+    }
+
+    const earliestDate = dayjs(now).subtract(12, 'month').startOf('month').toDate();
+
+    const [newUsers, newSubs] = await Promise.all([
+        prisma.user.findMany({
+            where: { createdAt: { gte: earliestDate } },
+            select: { createdAt: true },
+        }),
+        prisma.subscription.findMany({
+            where: { createdAt: { gte: earliestDate }, plan: { not: 'FREE' } },
+            select: { createdAt: true, plan: true },
+        }),
+    ]);
+
+    const userByMonth = new Map<string, number>();
+    const mrrByMonth = new Map<string, number>();
+    for (const u of newUsers) {
+        const k = dayjs(u.createdAt).format('YYYY-MM');
+        userByMonth.set(k, (userByMonth.get(k) ?? 0) + 1);
+    }
+    for (const s of newSubs) {
+        const k = dayjs(s.createdAt).format('YYYY-MM');
+        const price = PLAN_PRICE_KRW[s.plan] ?? 0;
+        mrrByMonth.set(k, (mrrByMonth.get(k) ?? 0) + price);
+    }
+
+    return months.map(m => ({
+        label: m.label,
+        value: userByMonth.get(m.ymKey) ?? 0,
+        secondaryValue: mrrByMonth.get(m.ymKey) ?? 0,
+    }));
+}
+
 export default async function RevenuePage() {
     const session = await auth();
     if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
 
     const { byPlan, totalMrr, subs } = await getRevenueStats();
+    const monthlyData = await getMonthlyTimeSeries();
     const arr = totalMrr * 12;
 
     return (
@@ -81,6 +125,23 @@ export default async function RevenuePage() {
                         <Text size="28px" fw={800}>{subs.filter(s => s.plan !== 'FREE').length.toLocaleString()}</Text>
                     </Paper>
                 </SimpleGrid>
+
+                <Paper withBorder p="md" radius="md">
+                    <Group justify="space-between" mb="sm">
+                        <Text fw={700}>📈 최근 12개월 추이</Text>
+                        <Group gap="xs">
+                            <Group gap={4}>
+                                <div style={{ width: 10, height: 10, background: 'var(--mantine-color-blue-5)', borderRadius: 2 }} />
+                                <Text size="xs" c="dimmed">신규 사용자</Text>
+                            </Group>
+                            <Group gap={4}>
+                                <div style={{ width: 10, height: 10, background: 'var(--mantine-color-violet-5)', borderRadius: 2 }} />
+                                <Text size="xs" c="dimmed">신규 MRR (₩)</Text>
+                            </Group>
+                        </Group>
+                    </Group>
+                    <BarChart data={monthlyData} height={180} />
+                </Paper>
 
                 <Paper withBorder p="md" radius="md">
                     <Text fw={700} mb="sm">📊 플랜별 분포</Text>
