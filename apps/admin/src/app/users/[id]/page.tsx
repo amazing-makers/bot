@@ -12,6 +12,7 @@ import {
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import AdminActionsPanel from './AdminActionsPanel';
+import ActivityHeatmap from './ActivityHeatmap';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +54,28 @@ export default async function UserDetailPage({ params }: PageProps) {
 
     if (!user) notFound();
 
+    // Phase 36 — 활동 히트맵: 최근 90일 캠페인 createdAt 기반 24×7 매트릭스
+    const ninetyDaysAgo = dayjs().subtract(90, 'day').toDate();
+    const activityRecords = await prisma.campaign.findMany({
+        where: { userId: id, createdAt: { gte: ninetyDaysAgo } },
+        select: { createdAt: true },
+    });
+    const heatmapMatrix: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
+    let peakDay = 0, peakHour = 0, peakCount = 0;
+    for (const r of activityRecords) {
+        const d = r.createdAt;
+        const day = d.getDay();
+        const hour = d.getHours();
+        heatmapMatrix[day][hour]++;
+        if (heatmapMatrix[day][hour] > peakCount) {
+            peakCount = heatmapMatrix[day][hour];
+            peakDay = day;
+            peakHour = hour;
+        }
+    }
+    const dayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+    const peak = peakCount > 0 ? { day: dayLabels[peakDay], hour: peakHour, count: peakCount } : null;
+
     const plan = user.subscription?.plan ?? 'FREE';
     const monthlyKrw = PLAN_PRICE_KRW[plan] ?? 0;
     const planColor = plan === 'BUSINESS' ? 'violet' : plan === 'PRO' ? 'blue' : plan === 'STARTER' ? 'teal' : 'gray';
@@ -89,6 +112,13 @@ export default async function UserDetailPage({ params }: PageProps) {
                     userEmail={user.email}
                     stripeCustomerId={user.subscription?.stripeCustomerId || null}
                     hasActiveSub={!!user.subscription && user.subscription.status === 'active'}
+                />
+
+                {/* Phase 36 — 활동 히트맵 (최근 90일 캠페인 작성) */}
+                <ActivityHeatmap
+                    matrix={heatmapMatrix}
+                    totalEvents={activityRecords.length}
+                    peak={peak}
                 />
 
                 {/* 핵심 지표 */}
