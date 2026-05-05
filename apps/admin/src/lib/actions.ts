@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import dayjs from 'dayjs';
+import { sendBroadcastEmail, simpleMarkdownToHtml } from '@/lib/email';
 
 async function requireAdminSession() {
     const session = await auth();
@@ -234,4 +235,113 @@ export async function forceCancelSubscription(userId: string, reason: string) {
 
     revalidatePath('/users/[id]', 'page');
     return { ok: true };
+}
+
+// ════════════════════════════════════════════════════════════
+//  Phase 32 — 브로드캐스트 이메일
+// ════════════════════════════════════════════════════════════
+
+export type BroadcastFilter = {
+    plan?: 'ALL' | 'FREE' | 'STARTER' | 'PRO' | 'BUSINESS' | 'PAID';
+    quick?: 'all' | 'paid' | 'free' | 'reseller' | 'referred';
+    signedUpAfter?: string; // ISO date
+};
+
+/**
+ * 필터 조건에 맞는 사용자 수만 조회 (보내기 전 미리보기).
+ */
+export async function previewBroadcast(filter: BroadcastFilter): Promise<{ count: number; sampleEmails: string[] }> {
+    await requireAdminSession();
+    const where = buildBroadcastWhere(filter);
+    const [count, sample] = await Promise.all([
+        prisma.user.count({ where }),
+        prisma.user.findMany({ where, select: { email: true }, take: 5 }),
+    ]);
+    return { count, sampleEmails: sample.map(s => s.email).filter(Boolean) as string[] };
+}
+
+/**
+ * 실제 발송. subject + bodyMarkdown 받아 simpleMarkdownToHtml 로 변환 후 sequential 발송.
+ * 매 50건마다 200ms 대기 (rate limit 회피).
+ */
+export async function sendBroadcast(input: {
+    filter: BroadcastFilter;
+    subject: string;
+    bodyMarkdown: string;
+    fromName?: string;
+}): Promise<{ ok: boolean; sent: number; failed: number; sampleErrors: string[] }> {
+    const admin = await requireAdminSession();
+    if (!input.subject?.trim()) throw new Error('제목은 필수입니다');
+    if (!input.bodyMarkdown?.trim()) throw new Error('본문은 필수입니다');
+
+    const where = buildBroadcastWhere(input.filter);
+    const users = await prisma.user.findMany({ where, select: { id: true, email: true, name: true } });
+    if (users.length === 0) throw new Error('대상 사용자가 없습니다');
+    if (users.length > 5000) throw new Error('한 번에 5000명까지 발송 가능합니다 (현재: ' + users.length + ')');
+
+    const html = simpleMarkdownToHtml(input.bodyMarkdown);
+    let sent = 0;
+    let failed = 0;
+    const sampleErrors: string[] = [];
+
+    for (let i = 0; i < users.length; i++) {
+        const u = users[i];
+        if (!u.email) continue;
+        const r = await sendBroadcastEmail({
+            to: u.email,
+            subject: input.subject,
+            html,
+            fromName: input.fromName?.trim() || undefined,
+        });
+        if (r.ok) sent++;
+        else {
+            failed++;
+            if (sampleErrors.length < 5) sampleErrors.push(`${u.email}: ${r.error}`);
+        }
+        // rate limit: 50건마다 200ms 대기
+        if ((i + 1) % 50 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+    }
+
+    await recordAudit({
+        adminEmail: admin.email!,
+        action: 'BROADCAST_EMAIL',
+        targetType: 'broadcast',
+        targetLabel: `${sent}명 발송 / ${failed} 실패 — "${input.subject.slice(0, 60)}"`,
+        metadata: {
+            filter: input.filter,
+            subject: input.subject,
+            bodyPreview: input.bodyMarkdown.slice(0, 200),
+            sent,
+            failed,
+            totalCandidates: users.length,
+        },
+    });
+
+    return { ok: true, sent, failed, sampleErrors };
+}
+
+function buildBroadcastWhere(filter: BroadcastFilter): any {
+    const where: any = {};
+    if (filter.plan && filter.plan !== 'ALL') {
+        if (filter.plan === 'PAID') {
+            where.subscription = { plan: { not: 'FREE' }, status: 'active' };
+        } else if (filter.plan === 'FREE') {
+            where.AND = [{ OR: [{ subscription: null }, { subscription: { plan: 'FREE' } }] }];
+        } else {
+            where.subscription = { plan: filter.plan };
+        }
+    }
+    if (filter.quick === 'paid') where.subscription = { ...where.subscription, plan: { not: 'FREE' }, status: 'active' };
+    else if (filter.quick === 'free') where.AND = [{ OR: [{ subscription: null }, { subscription: { plan: 'FREE' } }] }];
+    else if (filter.quick === 'reseller') where.reseller = { isNot: null };
+    else if (filter.quick === 'referred') where.referredByCodeId = { not: null };
+
+    if (filter.signedUpAfter) {
+        where.createdAt = { gte: new Date(filter.signedUpAfter) };
+    }
+    // 안전: email 없는 사용자 제외
+    where.email = { not: null };
+    return where;
 }
