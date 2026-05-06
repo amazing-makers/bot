@@ -1,4 +1,4 @@
-'use server';
+﻿'use server';
 
 import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
@@ -10,7 +10,7 @@ import { sendBroadcastEmail, simpleMarkdownToHtml } from '@/lib/email';
 
 async function requireAdminSession() {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) {
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) {
         throw new Error('FORBIDDEN');
     }
     return session.user;
@@ -324,6 +324,51 @@ export async function forceCancelSubscription(userId: string, reason: string) {
 
     revalidatePath('/users/[id]', 'page');
     return { ok: true };
+}
+
+/**
+ * Phase 49 — 사용자 ADMIN 권한 토글.
+ * USER ↔ ADMIN. 자기 자신 강등 방지 (마지막 ADMIN 보호).
+ */
+export async function toggleUserAdminRole(userId: string, reason?: string) {
+    const admin = await requireAdminSession();
+
+    const target = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, role: true },
+    });
+    if (!target) throw new Error('사용자 미존재');
+
+    const next: 'USER' | 'ADMIN' = target.role === 'ADMIN' ? 'USER' : 'ADMIN';
+
+    // 자기 자신 강등 방지
+    if (next === 'USER' && admin.email === target.email) {
+        throw new Error('자기 자신을 강등할 수 없습니다');
+    }
+
+    // 마지막 ADMIN 보호 (전체 ADMIN 이 1명일 때 강등 차단)
+    if (next === 'USER') {
+        const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+        if (adminCount <= 1) throw new Error('마지막 관리자는 강등할 수 없습니다');
+    }
+
+    await prisma.user.update({
+        where: { id: userId },
+        data: { role: next },
+    });
+
+    await recordAudit({
+        adminEmail: admin.email!,
+        action: next === 'ADMIN' ? 'ADMIN_GRANT' : 'ADMIN_REVOKE',
+        targetType: 'user',
+        targetId: userId,
+        targetLabel: target.email,
+        metadata: { from: target.role, to: next, reason: reason?.trim() || null },
+    });
+
+    revalidatePath('/users/[id]', 'page');
+    revalidatePath('/users');
+    return { ok: true, role: next };
 }
 
 // ════════════════════════════════════════════════════════════

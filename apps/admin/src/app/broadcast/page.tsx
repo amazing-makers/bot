@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { Stack, Title, Text } from '@mantine/core';
@@ -9,7 +9,7 @@ export const metadata = { title: '이메일 브로드캐스트 · Amakers Admin'
 
 export default async function BroadcastPage() {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     return (
         <Stack gap="md">

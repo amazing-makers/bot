@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import {
@@ -143,7 +143,7 @@ const CATEGORY_INFO: Record<string, { label: string; color: string; description:
 
 export default async function EmailTemplatesPage() {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     const grouped: Record<string, TemplateInfo[]> = {};
     for (const t of TEMPLATES) {

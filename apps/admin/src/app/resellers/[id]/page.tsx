@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -13,7 +13,7 @@ interface PageProps {
 
 export default async function ResellerDetailPage({ params }: PageProps) {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     const { id } = await params;
 

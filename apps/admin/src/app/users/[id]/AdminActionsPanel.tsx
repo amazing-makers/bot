@@ -1,21 +1,22 @@
 'use client';
 
-import { Paper, Group, Text, Button, NumberInput, Textarea, Stack, Modal, Anchor } from '@mantine/core';
-import { IconShield, IconClock, IconBan, IconExternalLink } from '@tabler/icons-react';
+import { Paper, Group, Text, Button, NumberInput, Textarea, Stack, Modal, Anchor, Badge } from '@mantine/core';
+import { IconShield, IconClock, IconBan, IconExternalLink, IconCrown, IconUserOff } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { extendUserTrial, forceCancelSubscription } from '@/lib/actions';
+import { extendUserTrial, forceCancelSubscription, toggleUserAdminRole } from '@/lib/actions';
 
 interface Props {
     userId: string;
     userEmail: string;
+    userRole: string;
     stripeCustomerId: string | null;
     hasActiveSub: boolean;
 }
 
-export default function AdminActionsPanel({ userId, userEmail, stripeCustomerId, hasActiveSub }: Props) {
+export default function AdminActionsPanel({ userId, userEmail, userRole, stripeCustomerId, hasActiveSub }: Props) {
     const router = useRouter();
     const [trialOpen, trialCtl] = useDisclosure(false);
     const [cancelOpen, cancelCtl] = useDisclosure(false);
@@ -40,6 +41,26 @@ export default function AdminActionsPanel({ userId, userEmail, stripeCustomerId,
             });
             trialCtl.close();
             setTrialReason('');
+            router.refresh();
+        } catch (e: any) {
+            notifications.show({ title: '오류', message: e?.message || '실패', color: 'red' });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleToggleAdmin = async () => {
+        const isAdminNow = userRole === 'ADMIN';
+        const action = isAdminNow ? '강등' : '승격';
+        if (!confirm(`${userEmail} 님을 ${isAdminNow ? '일반 USER 로 강등' : 'ADMIN 으로 승격'}합니다.\n계속하시겠습니까?`)) return;
+        setBusy(true);
+        try {
+            const r = await toggleUserAdminRole(userId);
+            notifications.show({
+                title: `✅ ${action} 완료`,
+                message: `${userEmail} → ${r.role}`,
+                color: r.role === 'ADMIN' ? 'violet' : 'gray',
+            });
             router.refresh();
         } catch (e: any) {
             notifications.show({ title: '오류', message: e?.message || '실패', color: 'red' });
@@ -81,9 +102,22 @@ export default function AdminActionsPanel({ userId, userEmail, stripeCustomerId,
                 <Group gap={6} mb="sm">
                     <IconShield size={18} color="var(--mantine-color-violet-6)" />
                     <Text fw={700}>관리자 액션</Text>
+                    {userRole === 'ADMIN' && (
+                        <Badge size="xs" color="violet" variant="filled" leftSection={<IconCrown size={10} />}>ADMIN</Badge>
+                    )}
                     <Text size="11px" c="dimmed">(모든 액션은 감사 로그에 기록됨)</Text>
                 </Group>
                 <Group gap="xs">
+                    <Button
+                        size="xs"
+                        leftSection={userRole === 'ADMIN' ? <IconUserOff size={14} /> : <IconCrown size={14} />}
+                        variant="light"
+                        color={userRole === 'ADMIN' ? 'gray' : 'violet'}
+                        onClick={handleToggleAdmin}
+                        loading={busy}
+                    >
+                        {userRole === 'ADMIN' ? '👤 ADMIN 강등' : '👑 ADMIN 승격'}
+                    </Button>
                     <Button
                         size="xs"
                         leftSection={<IconClock size={14} />}

@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -43,7 +43,7 @@ interface PageProps {
 
 export default async function AuditLogPage({ searchParams }: PageProps) {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     const sp = await searchParams;
 

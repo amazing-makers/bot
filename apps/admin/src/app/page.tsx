@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -98,7 +98,7 @@ function StatCard({ icon: Icon, color, label, value, hint }: {
 export default async function AdminHome() {
     const session = await auth();
     if (!session?.user) redirect('/login');
-    if (!isAdminEmail(session.user.email)) redirect('/login');
+    if (!isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     const stats = await getStats();
     const userGrowth = stats.newUsersLastMonth === 0

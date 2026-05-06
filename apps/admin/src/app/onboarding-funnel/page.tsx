@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -28,7 +28,7 @@ interface Stage {
 
 export default async function OnboardingFunnelPage({ searchParams }: PageProps) {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     const sp = await searchParams;
     const days = parseInt(sp.days || '30', 10);

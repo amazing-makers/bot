@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -30,7 +30,7 @@ const PLAN_PRICE_KRW: Record<string, number> = {
 
 export default async function UserDetailPage({ params }: PageProps) {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     const { id } = await params;
 
@@ -154,6 +154,7 @@ export default async function UserDetailPage({ params }: PageProps) {
                 <AdminActionsPanel
                     userId={user.id}
                     userEmail={user.email}
+                    userRole={user.role}
                     stripeCustomerId={user.subscription?.stripeCustomerId || null}
                     hasActiveSub={!!user.subscription && user.subscription.status === 'active'}
                 />

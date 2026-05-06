@@ -1,4 +1,4 @@
-import '@mantine/core/styles.css';
+﻿import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
 import '@mantine/notifications/styles.css';
 
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
     const session = await auth();
     // 인증된 admin 만 shell 적용. 비인증/비admin 은 layout 없이 raw 렌더 (login 페이지용).
-    const isAuthed = session?.user && isAdminEmail(session.user.email);
+    const isAuthed = session?.user && isAdminEmail(session.user.email, (session.user as any).role);
 
     return (
         <html lang="ko" {...mantineHtmlProps}>

@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: NextRequest) {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) {
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) {
         return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
     }
 

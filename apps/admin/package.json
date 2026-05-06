@@ -16,6 +16,8 @@
     "@amakers/types": "*",
     "@amakers/ui": "*",
     "@auth/prisma-adapter": "^2.7.0",
+    "bcryptjs": "^2.4.3",
+    "@types/bcryptjs": "^2.4.6",
     "@prisma/adapter-pg": "^7.0.0",
     "pg": "^8.13.0",
     "@types/pg": "^8.11.0",

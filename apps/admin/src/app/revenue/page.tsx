@@ -1,4 +1,4 @@
-import { auth } from '@/auth';
+﻿import { auth } from '@/auth';
 import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -200,7 +200,7 @@ async function getChurnStats() {
 
 export default async function RevenuePage() {
     const session = await auth();
-    if (!session?.user || !isAdminEmail(session.user.email)) redirect('/login');
+    if (!session?.user || !isAdminEmail(session.user.email, (session.user as any).role)) redirect('/login');
 
     const [{ byPlan, totalMrr, subs }, monthlyData, cohorts, churn] = await Promise.all([
         getRevenueStats(),
