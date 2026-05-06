@@ -13,6 +13,7 @@ import Link from 'next/link';
 import dayjs from 'dayjs';
 import AdminActionsPanel from './AdminActionsPanel';
 import ActivityHeatmap from './ActivityHeatmap';
+import EngagementScore from './EngagementScore';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +77,49 @@ export default async function UserDetailPage({ params }: PageProps) {
     const dayLabels = ['일', '월', '화', '수', '목', '금', '토'];
     const peak = peakCount > 0 ? { day: dayLabels[peakDay], hour: peakHour, count: peakCount } : null;
 
+    // Phase 48 — Engagement Score 계산
+    const sevenDaysAgo = dayjs().subtract(7, 'day').toDate();
+    const thirtyDaysAgo = dayjs().subtract(30, 'day').toDate();
+    const [lastCampaign, lastWeekCount, lastMonthCount, taskStats] = await Promise.all([
+        prisma.campaign.findFirst({
+            where: { userId: id },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+        }),
+        prisma.campaign.count({ where: { userId: id, createdAt: { gte: sevenDaysAgo } } }),
+        prisma.campaign.findMany({
+            where: { userId: id, createdAt: { gte: thirtyDaysAgo } },
+            select: { createdAt: true },
+        }),
+        prisma.scheduledTask.groupBy({
+            by: ['status'],
+            where: { campaign: { userId: id }, executedAt: { gte: thirtyDaysAgo } },
+            _count: { _all: true },
+        }),
+    ]);
+
+    const recencyDays = lastCampaign
+        ? Math.floor(dayjs().diff(lastCampaign.createdAt, 'day'))
+        : 999;
+    const frequencyPerWeek = lastWeekCount;
+    const uniqueDays = new Set(lastMonthCount.map(c => dayjs(c.createdAt).format('YYYY-MM-DD')));
+    const consistencyDays = uniqueDays.size;
+    const totalTasks = taskStats.reduce((s, g) => s + g._count._all, 0);
+    const successTasks = taskStats.find(g => g.status === 'SUCCESS')?._count?._all || 0;
+    const successRate = totalTasks > 0 ? Math.round((successTasks / totalTasks) * 100) : 0;
+
+    // 점수 계산 (각 0-100, 가중평균)
+    const recencyScore = Math.max(0, 100 - recencyDays * 3);
+    const frequencyScore = Math.min(100, frequencyPerWeek * 20);
+    const consistencyScore = Math.round((consistencyDays / 30) * 100);
+    const engagementScore = Math.round(
+        recencyScore * 0.35 + frequencyScore * 0.25 + consistencyScore * 0.25 + successRate * 0.15
+    );
+    const engagementLabel: 'cold' | 'warm' | 'hot' | 'champion' =
+        engagementScore >= 75 ? 'champion' :
+        engagementScore >= 50 ? 'hot' :
+        engagementScore >= 25 ? 'warm' : 'cold';
+
     const plan = user.subscription?.plan ?? 'FREE';
     const monthlyKrw = PLAN_PRICE_KRW[plan] ?? 0;
     const planColor = plan === 'BUSINESS' ? 'violet' : plan === 'PRO' ? 'blue' : plan === 'STARTER' ? 'teal' : 'gray';
@@ -112,6 +156,18 @@ export default async function UserDetailPage({ params }: PageProps) {
                     userEmail={user.email}
                     stripeCustomerId={user.subscription?.stripeCustomerId || null}
                     hasActiveSub={!!user.subscription && user.subscription.status === 'active'}
+                />
+
+                {/* Phase 48 — Engagement Score */}
+                <EngagementScore
+                    score={engagementScore}
+                    label={engagementLabel}
+                    factors={{
+                        recencyDays,
+                        frequencyPerWeek,
+                        consistencyDays,
+                        successRate,
+                    }}
                 />
 
                 {/* Phase 36 — 활동 히트맵 (최근 90일 캠페인 작성) */}
