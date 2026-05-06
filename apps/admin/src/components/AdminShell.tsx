@@ -66,6 +66,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         { href: '/onboarding-funnel', label: '📉 온보딩 Funnel', icon: IconTrendingDown },
         { href: '/feedback', label: '💬 피드백 분석', icon: IconMessage },
         { href: '/broadcast', label: '📣 이메일 브로드캐스트', icon: IconMail },
+        { href: '/email-templates', label: '📨 이메일 템플릿', icon: IconMail },
         { href: '/audit', label: '📜 감사 로그', icon: IconHistory },
         { href: '/bots', label: '🤖 봇 레지스트리', icon: IconRobot },
     ];
