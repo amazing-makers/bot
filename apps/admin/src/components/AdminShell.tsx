@@ -10,7 +10,7 @@ import '@mantine/spotlight/styles.css';
 import {
     IconDashboard, IconUsers, IconCash, IconRobot, IconUsersGroup,
     IconLogout, IconSun, IconMoon, IconSearch, IconMessage, IconFileAnalytics,
-    IconShield, IconHistory, IconMail, IconCreditCard,
+    IconShield, IconHistory, IconMail, IconCreditCard, IconTrendingDown,
 } from '@tabler/icons-react';
 import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -63,6 +63,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         { href: '/resellers', label: '🤝 리셀러·파트너', icon: IconUsersGroup },
         { href: '/revenue', label: '💰 매출·정산', icon: IconCash },
         { href: '/stripe', label: '💳 Stripe 결제', icon: IconCreditCard },
+        { href: '/onboarding-funnel', label: '📉 온보딩 Funnel', icon: IconTrendingDown },
         { href: '/feedback', label: '💬 피드백 분석', icon: IconMessage },
         { href: '/broadcast', label: '📣 이메일 브로드캐스트', icon: IconMail },
         { href: '/audit', label: '📜 감사 로그', icon: IconHistory },
