@@ -3,10 +3,10 @@ import { isAdminEmail } from '@amakers/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import {
-    Title, Text, Table, Badge, Group, Anchor, TextInput, Stack, Paper, Select, Button, Pagination,
+    Title, Text, Badge, Group, Anchor, TextInput, Stack, Paper, Select, Button, Pagination,
 } from '@mantine/core';
 import Link from 'next/link';
-import dayjs from 'dayjs';
+import UsersTableClient from './UsersTableClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -171,54 +171,21 @@ export default async function UsersPage({ searchParams }: PageProps) {
                 </form>
             </Paper>
 
-            <Paper withBorder radius="md" style={{ overflow: 'hidden' }}>
-                <Table.ScrollContainer minWidth={900}>
-                    <Table striped highlightOnHover>
-                        <Table.Thead>
-                            <Table.Tr>
-                                <Table.Th>이메일</Table.Th>
-                                <Table.Th>이름</Table.Th>
-                                <Table.Th>플랜</Table.Th>
-                                <Table.Th>가입일</Table.Th>
-                                <Table.Th>채널</Table.Th>
-                                <Table.Th>캠페인</Table.Th>
-                                <Table.Th>시리즈</Table.Th>
-                                <Table.Th>리퍼럴</Table.Th>
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                            {users.map(u => {
-                                const plan = u.subscription?.plan ?? 'FREE';
-                                const planColor = plan === 'BUSINESS' ? 'violet' : plan === 'PRO' ? 'blue' : plan === 'STARTER' ? 'teal' : 'gray';
-                                return (
-                                    <Table.Tr key={u.id}>
-                                        <Table.Td>
-                                            <Anchor component={Link} href={`/users/${u.id}`} size="sm">{u.email}</Anchor>
-                                        </Table.Td>
-                                        <Table.Td><Text size="sm">{u.name || '-'}</Text></Table.Td>
-                                        <Table.Td>
-                                            <Badge color={planColor} variant="light" size="sm">{plan}</Badge>
-                                        </Table.Td>
-                                        <Table.Td><Text size="xs" c="dimmed">{dayjs(u.createdAt).format('YYYY-MM-DD')}</Text></Table.Td>
-                                        <Table.Td><Text size="sm">{u._count.channels}</Text></Table.Td>
-                                        <Table.Td><Text size="sm">{u._count.campaigns}</Text></Table.Td>
-                                        <Table.Td><Text size="sm">{u._count.series}</Text></Table.Td>
-                                        <Table.Td>
-                                            {u.referredByCode?.reseller ? (
-                                                <Badge color="cyan" variant="light" size="xs">
-                                                    {u.referredByCode.reseller.name} ({u.referredByCode.code})
-                                                </Badge>
-                                            ) : (
-                                                <Text size="xs" c="dimmed">-</Text>
-                                            )}
-                                        </Table.Td>
-                                    </Table.Tr>
-                                );
-                            })}
-                        </Table.Tbody>
-                    </Table>
-                </Table.ScrollContainer>
-            </Paper>
+            <UsersTableClient
+                users={users.map(u => ({
+                    id: u.id,
+                    email: u.email,
+                    name: u.name,
+                    createdAt: u.createdAt.toISOString(),
+                    subscription: u.subscription
+                        ? { plan: u.subscription.plan, status: u.subscription.status }
+                        : null,
+                    _count: u._count,
+                    referredByCode: u.referredByCode
+                        ? { code: u.referredByCode.code, reseller: u.referredByCode.reseller }
+                        : null,
+                }))}
+            />
 
             {/* Pagination */}
             {pageCount > 1 && (

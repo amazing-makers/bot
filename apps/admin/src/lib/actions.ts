@@ -145,6 +145,95 @@ export async function updateCommissionRate(resellerId: string, rate: number) {
 }
 
 /**
+ * Phase 46 — 다수 사용자 트라이얼 일괄 연장.
+ * extendUserTrial 을 순차 호출 (트랜잭션 X — 일부 실패해도 나머지 진행).
+ */
+export async function bulkExtendTrial(input: {
+    userIds: string[];
+    days: number;
+    reason?: string;
+}): Promise<{ ok: boolean; success: number; failed: number; errors: string[] }> {
+    const admin = await requireAdminSession();
+    if (input.userIds.length === 0) throw new Error('대상 사용자가 없습니다');
+    if (input.userIds.length > 200) throw new Error('한 번에 최대 200명까지 처리 가능');
+    if (input.days < 1 || input.days > 365) throw new Error('연장 일수는 1-365일');
+
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const userId of input.userIds) {
+        try {
+            // extendUserTrial 의 핵심 로직 직접 호출 (audit 로그 1번씩 생성)
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { id: true, email: true },
+            });
+            if (!user) {
+                failed++;
+                if (errors.length < 5) errors.push(`${userId}: not found`);
+                continue;
+            }
+
+            const existing = await prisma.license.findFirst({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+            });
+
+            let newValidUntil: Date;
+            if (existing) {
+                const base = existing.validUntil && existing.validUntil > new Date() ? existing.validUntil : new Date();
+                newValidUntil = dayjs(base).add(input.days, 'day').toDate();
+                await prisma.license.update({
+                    where: { id: existing.id },
+                    data: { validUntil: newValidUntil },
+                });
+            } else {
+                newValidUntil = dayjs().add(input.days, 'day').toDate();
+                const generateKey = () => {
+                    const part = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+                    return `MB-${part()}-${part()}-${part()}-${part()}`;
+                };
+                await prisma.license.create({
+                    data: {
+                        id: `lic_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                        userId,
+                        key: generateKey(),
+                        plan: 'FREE_TRIAL',
+                        validUntil: newValidUntil,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    },
+                });
+            }
+
+            success++;
+        } catch (e: any) {
+            failed++;
+            if (errors.length < 5) errors.push(`${input.userIds[0]}: ${e?.message}`);
+        }
+    }
+
+    // 일괄 작업 단일 audit 로그
+    await recordAudit({
+        adminEmail: admin.email!,
+        action: 'BULK_TRIAL_EXTEND',
+        targetType: 'users',
+        targetLabel: `${success}/${input.userIds.length}명 연장 ${input.days}일`,
+        metadata: {
+            userCount: input.userIds.length,
+            days: input.days,
+            success,
+            failed,
+            reason: input.reason?.trim() || null,
+        },
+    });
+
+    revalidatePath('/users');
+    return { ok: true, success, failed, errors };
+}
+
+/**
  * Phase 31 — 사용자 트라이얼 라이센스 N일 연장.
  * 기존 라이센스가 있으면 validUntil 만 연장, 없으면 새로 생성.
  */
