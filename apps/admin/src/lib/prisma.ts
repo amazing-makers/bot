@@ -14,7 +14,7 @@ function createClient(): PrismaClient {
         globalThis.__adminPgPool ??
         new pg.Pool({
             connectionString: process.env.DATABASE_URL,
-            max: 5, // serverless: lambda 당 풀 작게 유지 (Supabase pooler 한도 보호)
+            max: 1, // serverless: lambda 당 1 connection — Supabase Session pooler 15 한도 보호
             idleTimeoutMillis: 30_000,
             connectionTimeoutMillis: 10_000,
         });
