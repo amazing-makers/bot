@@ -4,6 +4,7 @@ import { Container, Paper, Stack, TextInput, PasswordInput, Button, Title, Text,
 import { useForm } from '@mantine/form';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 
 export default function AdminLoginPage() {
     const router = useRouter();
@@ -18,21 +19,18 @@ export default function AdminLoginPage() {
         setSubmitting(true);
         setError(null);
         try {
-            const res = await fetch('/api/auth/callback/credentials', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    email: values.email,
-                    password: values.password,
-                    redirect: 'false',
-                    callbackUrl: '/',
-                }).toString(),
+            const res = await signIn('credentials', {
+                email: values.email,
+                password: values.password,
+                redirect: false,
             });
-            if (res.ok || res.redirected) {
+            if (res?.error) {
+                setError('이메일 또는 비밀번호가 올바르지 않거나 관리자 권한이 없습니다.');
+            } else if (res?.ok) {
                 router.push('/');
                 router.refresh();
             } else {
-                setError('이메일 또는 비밀번호가 올바르지 않거나 관리자 권한이 없습니다.');
+                setError('로그인 실패 — 알 수 없는 오류');
             }
         } catch {
             setError('로그인 실패 — 네트워크 오류');
@@ -53,7 +51,7 @@ export default function AdminLoginPage() {
                         <Stack gap="sm">
                             <TextInput
                                 label="이메일"
-                                placeholder="help@amakers.co.kr"
+                                placeholder="admin@amakers.co.kr"
                                 required
                                 {...form.getInputProps('email')}
                             />
@@ -69,7 +67,7 @@ export default function AdminLoginPage() {
                         </Stack>
                     </form>
                     <Text c="dimmed" size="xs">
-                        ADMIN_EMAILS 환경변수에 등록된 이메일만 접근 가능합니다.
+                        User.role = ADMIN 또는 ADMIN_EMAILS 화이트리스트 사용자만 접근 가능합니다.
                     </Text>
                 </Stack>
             </Paper>
