@@ -3,11 +3,9 @@
 import { Container, Paper, Stack, TextInput, PasswordInput, Button, Title, Text, Box } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 export default function AdminLoginPage() {
-    const router = useRouter();
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -27,8 +25,8 @@ export default function AdminLoginPage() {
             if (res?.error) {
                 setError('이메일 또는 비밀번호가 올바르지 않거나 관리자 권한이 없습니다.');
             } else if (res?.ok) {
-                router.push('/');
-                router.refresh();
+                // hard navigation — signIn 직후 router.push 는 신규 세션 쿠키가 server component 까지 전파되기 전에 navigate 되어 / 의 auth() 가 미인증으로 판단, /login 으로 튕기는 race condition 발생. window.location 으로 전체 reload 해 쿠키 반영 보장.
+                window.location.href = '/';
             } else {
                 setError('로그인 실패 — 알 수 없는 오류');
             }
