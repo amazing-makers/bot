@@ -151,7 +151,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                                 component={Link}
                                 href={item.href}
                                 label={item.label}
-                                leftSection={<item.icon size={18} stroke={1.5} />}
                                 active={item.exact ? pathname === item.href : !!pathname && pathname.startsWith(item.href)}
                             />
                         ))}
