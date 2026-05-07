@@ -27,7 +27,7 @@ export default async function ResellersPage() {
         <Stack gap="md">
             <Group justify="space-between">
                 <Title order={2}>🤝 리셀러 관리 ({resellers.length}명)</Title>
-                <Button component={Link} href="/resellers/new" color="violet">+ 새 리셀러 등록</Button>
+                <Button component="a" href="/resellers/new" color="violet">+ 새 리셀러 등록</Button>
             </Group>
 
                 {resellers.length === 0 && (
@@ -63,7 +63,7 @@ export default async function ResellersPage() {
                                     return (
                                         <Table.Tr key={r.id}>
                                             <Table.Td>
-                                                <Anchor component={Link} href={`/resellers/${r.id}`} size="sm" fw={600}>{r.name}</Anchor>
+                                                <Anchor href={`/resellers/${r.id}`} size="sm" fw={600}>{r.name}</Anchor>
                                                 <Text size="xs" c="dimmed">{r.user.email}</Text>
                                             </Table.Td>
                                             <Table.Td><Text size="sm">{r.contactEmail}</Text></Table.Td>

@@ -134,7 +134,7 @@ export default async function StripePage({ searchParams }: PageProps) {
                     <Stack gap={4}>
                         {subs.filter(s => s.status === 'past_due').slice(0, 5).map(s => (
                             <Group key={s.id} justify="space-between" wrap="nowrap">
-                                <Anchor component={Link} href={`/users/${s.user.id}`} size="sm" fw={600}>
+                                <Anchor href={`/users/${s.user.id}`} size="sm" fw={600}>
                                     {s.user.email}
                                 </Anchor>
                                 <Group gap={6}>
@@ -151,13 +151,13 @@ export default async function StripePage({ searchParams }: PageProps) {
             <Paper withBorder p="md" radius="md">
                 <Text fw={700} size="sm" mb="sm">상태 분포</Text>
                 <Group gap="xs">
-                    <Anchor component={Link} href="/stripe">
+                    <Anchor href="/stripe">
                         <Badge size="md" variant={!sp.status ? 'filled' : 'light'} color="gray">
                             전체 {byStatus.reduce((sum, b) => sum + b._count._all, 0)}
                         </Badge>
                     </Anchor>
                     {byStatus.map(b => (
-                        <Anchor key={b.status} component={Link} href={`/stripe?status=${b.status}`}>
+                        <Anchor key={b.status} href={`/stripe?status=${b.status}`}>
                             <Badge
                                 size="md"
                                 variant={sp.status === b.status ? 'filled' : 'light'}
@@ -193,7 +193,7 @@ export default async function StripePage({ searchParams }: PageProps) {
                                     <Group justify="space-between" wrap="nowrap">
                                         <Stack gap={0}>
                                             <Group gap={6}>
-                                                <Anchor component={Link} href={`/users/${s.userId}`} size="sm" fw={600}>
+                                                <Anchor href={`/users/${s.userId}`} size="sm" fw={600}>
                                                     {s.user.email}
                                                 </Anchor>
                                                 <Badge size="xs" variant="light">{s.plan}</Badge>
@@ -222,7 +222,7 @@ export default async function StripePage({ searchParams }: PageProps) {
                         구독 목록 ({subs.length}건{(sp.status || sp.plan) ? ' · 필터 적용' : ''})
                     </Text>
                     {(sp.status || sp.plan) && (
-                        <Anchor component={Link} href="/stripe" size="xs" c="red">필터 초기화</Anchor>
+                        <Anchor href="/stripe" size="xs" c="red">필터 초기화</Anchor>
                     )}
                 </Group>
                 <Table.ScrollContainer minWidth={680}>
@@ -241,12 +241,12 @@ export default async function StripePage({ searchParams }: PageProps) {
                             {subs.map(s => (
                                 <Table.Tr key={s.id}>
                                     <Table.Td>
-                                        <Anchor component={Link} href={`/users/${s.userId}`} size="sm">
+                                        <Anchor href={`/users/${s.userId}`} size="sm">
                                             {s.user.email}
                                         </Anchor>
                                     </Table.Td>
                                     <Table.Td>
-                                        <Anchor component={Link} href={`/stripe?plan=${s.plan}`} size="xs">
+                                        <Anchor href={`/stripe?plan=${s.plan}`} size="xs">
                                             <Badge size="sm" variant="light">{s.plan}</Badge>
                                         </Anchor>
                                     </Table.Td>

@@ -300,7 +300,7 @@ function BotCard({ title, desc, domain, status, users }: {
 
 function QuickLink({ href, icon: Icon, label }: { href: string; icon: any; label: string }) {
     return (
-        <Anchor component={Link} href={href} underline="never">
+        <Anchor href={href} underline="never">
             <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }}>
                 <Group gap="sm">
                     <ThemeIcon size={32} radius="md" variant="light"><Icon size={16} /></ThemeIcon>

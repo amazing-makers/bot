@@ -131,7 +131,7 @@ export default async function UserDetailPage({ params }: PageProps) {
         <Stack gap="md">
             {/* 헤더 */}
             <Stack gap={2}>
-                <Anchor component={Link} href="/users" size="sm">← 사용자 목록</Anchor>
+                <Anchor href="/users" size="sm">← 사용자 목록</Anchor>
                 <Group gap="sm" align="center">
                         <ThemeIcon size={48} radius="xl" variant="light" color="blue"><IconUser size={28} /></ThemeIcon>
                         <Stack gap={0}>
@@ -211,7 +211,7 @@ export default async function UserDetailPage({ params }: PageProps) {
                                     <Text size="xs" c="dimmed" mb={4}>추천 받음</Text>
                                     <Group gap={6}>
                                         <Badge color="cyan" variant="light">{user.referredByCode?.code}</Badge>
-                                        <Anchor component={Link} href={`/resellers/${user.referredByCode?.reseller.id}`} size="sm" fw={600}>
+                                        <Anchor href={`/resellers/${user.referredByCode?.reseller.id}`} size="sm" fw={600}>
                                             {user.referredByCode?.reseller.name}
                                         </Anchor>
                                     </Group>
@@ -221,7 +221,7 @@ export default async function UserDetailPage({ params }: PageProps) {
                                 <Card withBorder p="sm" radius="md">
                                     <Text size="xs" c="dimmed" mb={4}>본인이 리셀러</Text>
                                     <Group gap={6}>
-                                        <Anchor component={Link} href={`/resellers/${user.reseller.id}`} size="sm" fw={600}>
+                                        <Anchor href={`/resellers/${user.reseller.id}`} size="sm" fw={600}>
                                             {user.reseller.name}
                                         </Anchor>
                                         <Badge size="sm" variant="light">코드 {user.reseller.referralCodes.length}개</Badge>

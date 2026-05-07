@@ -102,7 +102,7 @@ export default async function AuditLogPage({ searchParams }: PageProps) {
                     <IconFilter size={16} />
                     <Text fw={700} size="sm">필터</Text>
                     {hasFilters && (
-                        <Anchor component={Link} href="/audit" size="xs" c="red">
+                        <Anchor href="/audit" size="xs" c="red">
                             <Group gap={2}><IconX size={11} /><span>초기화</span></Group>
                         </Anchor>
                     )}
@@ -227,7 +227,7 @@ export default async function AuditLogPage({ searchParams }: PageProps) {
                                         </Group>
                                         <Group gap={6} mb={4}>
                                             <IconUser size={11} color="var(--mantine-color-dimmed)" />
-                                            <Anchor component={Link} href={`/audit?admin=${encodeURIComponent(log.adminEmail)}`} size="11px">
+                                            <Anchor href={`/audit?admin=${encodeURIComponent(log.adminEmail)}`} size="11px">
                                                 {log.adminEmail}
                                             </Anchor>
                                             {log.ipAddress && <Text size="11px" c="dimmed">· IP {log.ipAddress}</Text>}

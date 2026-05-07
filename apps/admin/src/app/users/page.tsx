@@ -113,19 +113,19 @@ export default async function UsersPage({ searchParams }: PageProps) {
 
             {/* 빠른 필터 */}
             <Group gap="xs">
-                <Anchor component={Link} href="/users" size="xs">
+                <Anchor href="/users" size="xs">
                     <Badge size="md" variant={!quick ? 'filled' : 'light'} color="gray">전체</Badge>
                 </Anchor>
-                <Anchor component={Link} href="/users?quick=paid" size="xs">
+                <Anchor href="/users?quick=paid" size="xs">
                     <Badge size="md" variant={quick === 'paid' ? 'filled' : 'light'} color="teal">💰 유료</Badge>
                 </Anchor>
-                <Anchor component={Link} href="/users?quick=free" size="xs">
+                <Anchor href="/users?quick=free" size="xs">
                     <Badge size="md" variant={quick === 'free' ? 'filled' : 'light'} color="gray">🆓 무료</Badge>
                 </Anchor>
-                <Anchor component={Link} href="/users?quick=reseller" size="xs">
+                <Anchor href="/users?quick=reseller" size="xs">
                     <Badge size="md" variant={quick === 'reseller' ? 'filled' : 'light'} color="violet">🤝 리셀러</Badge>
                 </Anchor>
-                <Anchor component={Link} href="/users?quick=referred" size="xs">
+                <Anchor href="/users?quick=referred" size="xs">
                     <Badge size="md" variant={quick === 'referred' ? 'filled' : 'light'} color="cyan">🎁 추천 가입</Badge>
                 </Anchor>
             </Group>
