@@ -1,6 +1,8 @@
 import type { NextAuthConfig } from 'next-auth';
 
 export const authConfig: NextAuthConfig = {
+    // Vercel 등 프록시 뒤에서 host header 신뢰 (CSRF 쿠키 정상 발급 위해 필수)
+    trustHost: true,
     pages: {
         signIn: '/login',
     },
