@@ -19,4 +19,4 @@
 
 ## 시작 시점
 
-마케팅봇 안정화 + admin/reseller 정상 작동 후 착수.
+마케팅봇 안정화 + admin/reseller 정상 작동 후 착수. (현재 우선순위는 pdpbot)
