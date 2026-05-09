@@ -1,0 +1,179 @@
+// pdpbot Prisma schema
+//
+// 전략: 마케팅봇과 같은 DATABASE_URL 사용 → 같은 Supabase DB.
+// User / Subscription / UserCredit 등 공유 테이블은 marketingbot 의 source-of-truth 와 동일하게 정의.
+// pdp 전용 테이블은 prefix 없이 별도 (Product, ScrapedPage, ScrapedImage, OutputImage 등).
+//
+// 통합 마이그레이션은 packages/db 정식 도입 시 (마케팅봇 apps/marketing 이전 시점). 그 전까지는
+// 같은 schema 내용을 양쪽이 동기화 — 충돌 방지를 위해 pdp 전용 모델만 신규 마이그레이션 으로 추가.
+
+generator client {
+    provider        = "prisma-client-js"
+    previewFeatures = ["driverAdapters"]
+    output          = "../node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// ===== 공유 모델 (marketingbot 과 같은 테이블) =====
+//
+// 같은 DB 의 같은 테이블 — 마케팅봇이 source-of-truth. 여기서는 pdp 가 read/write 하기 위한
+// type 정의만 (Prisma client 가 type-safe 하게 동작하도록).
+
+enum UserRole {
+    USER
+    ADMIN
+}
+
+model User {
+    id                    String    @id @default(cuid())
+    email                 String    @unique
+    password              String
+    name                  String?
+    role                  UserRole  @default(USER)
+    onboardingCompletedAt DateTime?
+    createdAt             DateTime  @default(now())
+    updatedAt             DateTime  @updatedAt
+
+    currentWorkspaceId String?
+
+    // pdp 관련 관계
+    products  Product[]
+    credits   UserCredit?
+
+    @@map("User")
+}
+
+// 사용량 기반 credit (Phase 50 — 패키지·통합 결제 모델).
+//
+// 사용자가 결제하면 balance 증가, 봇 사용 시 차감. 모든 봇 (pdpbot, marketingbot, designbot 등) 이
+// 같은 잔액 사용 — '통합 결제' 의 핵심.
+//
+// 단가 (1 credit = 100원 기준 추정):
+//   - GPT-4 Vision OCR (이미지 1장)         : 5 credits
+//   - FLUX 1.1 Pro Fill 인페인팅 (1장)      : 30 credits
+//   - Claude Opus 번역 (단일 텍스트)         : 5 credits
+//   - FLUX 신규 이미지 생성                  : 20 credits
+//   - 마케팅봇 발행 (클라우드 채널 1회)      : 1 credit
+//   - 마케팅봇 발행 (에이전트 채널 1회)      : 2 credits
+model UserCredit {
+    id        String   @id @default(cuid())
+    userId    String   @unique
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    balance   Int      @default(0) // 1 credit = ₩100 (또는 사업 정책에 따라)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    transactions CreditTransaction[]
+
+    @@map("UserCredit")
+}
+
+// 모든 credit 변동 이력 (audit log + 사용자 대시보드 표시).
+model CreditTransaction {
+    id          String   @id @default(cuid())
+    userCreditId String
+    userCredit  UserCredit @relation(fields: [userCreditId], references: [id], onDelete: Cascade)
+    delta       Int      // +면 충전, -면 차감
+    balanceAfter Int     // 변동 후 잔액 스냅샷
+    bot         String?  // 'pdpbot' | 'marketingbot' | 'designbot' 등
+    action      String   // 'PURCHASE' | 'OCR' | 'INPAINT' | 'TRANSLATE' | 'PUBLISH' | 'REFUND' 등
+    refType     String?  // 연관된 모델명 (예: 'Product', 'ScheduledTask')
+    refId       String?  // 연관된 record id
+    metadata    Json?    // 추가 정보 (이미지 size, API 응답 등)
+    createdAt   DateTime @default(now())
+
+    @@index([userCreditId, createdAt])
+    @@index([bot, createdAt])
+    @@map("CreditTransaction")
+}
+
+// ===== pdp 전용 모델 =====
+
+// 사용자가 처리하려는 상품 (URL 입력 시 root entity).
+model Product {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    sourceUrl String   // 원본 URL (쿠팡·타오바오 등)
+    source    String   // 'coupang' | 'naver' | 'taobao' | '1688' | 'amazon' | 'generic'
+    title     String?  // 자동 추출된 상품명
+    price     String?  // 자동 추출된 가격 (raw string)
+    metadata  Json?    // 사이트별 추가 메타 (옵션, 카테고리 등)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    images       ScrapedImage[]
+    outputImages OutputImage[]
+
+    @@index([userId, createdAt])
+    @@index([source])
+    @@map("Product")
+}
+
+// 스크래핑한 원본 이미지.
+model ScrapedImage {
+    id           String   @id @default(cuid())
+    productId    String
+    product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+    sourceUrl    String   // 원본 사이트의 이미지 URL
+    r2Url        String?  // R2 에 저장된 백업 URL (외부 링크 끊겨도 보존)
+    type         String   @default("detail") // 'main' | 'detail'
+    width        Int?
+    height       Int?
+    altText      String?
+    orderIdx     Int      @default(0)
+    createdAt    DateTime @default(now())
+
+    textRegions  TextRegion[]
+    outputs      OutputImage[]
+
+    @@index([productId, orderIdx])
+    @@map("ScrapedImage")
+}
+
+// 이미지 안 텍스트 영역 (OCR 결과).
+//
+// GPT-4 Vision 또는 PaddleOCR 가 detect한 각 텍스트 영역.
+// bbox 는 이미지 좌표계 (x, y, w, h) 비율 (0~1) 또는 절대 px.
+model TextRegion {
+    id              String   @id @default(cuid())
+    scrapedImageId  String
+    scrapedImage    ScrapedImage @relation(fields: [scrapedImageId], references: [id], onDelete: Cascade)
+    bboxX           Float    // 0~1 비율 (이미지 width 기준)
+    bboxY           Float
+    bboxW           Float
+    bboxH           Float
+    originalText    String   @db.Text
+    sourceLanguage  String?  // 'zh' | 'en' | 'ja' 등 (자동 감지)
+    translatedText  String?  @db.Text  // Claude Opus 가 번역한 한국어
+    userOverride    String?  @db.Text  // 사용자가 직접 수정한 텍스트
+    detectedAt      DateTime @default(now())
+
+    @@index([scrapedImageId])
+    @@map("TextRegion")
+}
+
+// 사용자가 다운로드 받는 최종 이미지 (인페인팅 + 한국어 합성 결과).
+model OutputImage {
+    id              String   @id @default(cuid())
+    productId       String
+    product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+    sourceImageId   String?  // 원본 ScrapedImage (Phase 1)
+    sourceImage     ScrapedImage? @relation(fields: [sourceImageId], references: [id], onDelete: SetNull)
+    r2Url           String   // R2 에 저장된 결과 PNG
+    width           Int?
+    height          Int?
+    /** 'inpaint_translate' (Phase 1) | 'ai_generate' (Phase 3) */
+    mode            String   @default("inpaint_translate")
+    /** 처리에 사용된 credits (audit) */
+    creditsUsed     Int?
+    metadata        Json?    // 사용 모델 (FLUX 1.1 Pro 등), 처리 시간 등
+    createdAt       DateTime @default(now())
+
+    @@index([productId, createdAt])
+    @@map("OutputImage")
+}
