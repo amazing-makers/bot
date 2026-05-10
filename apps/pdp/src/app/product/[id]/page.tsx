@@ -8,6 +8,7 @@ import {
 import { IconWand, IconDownload, IconArrowLeft, IconExternalLink, IconCoin } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
+import ProductAnalysis from '@/components/ProductAnalysis';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,6 +117,15 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                             </Box>
                         </SimpleGrid>
                     </Paper>
+
+                    {/* AI 상품 분석 */}
+                    <Box mb="lg">
+                        <ProductAnalysis
+                            productId={product.id}
+                            initialAnalysis={(product.metadata as any)?.analysis || null}
+                            initialAnalyzedAt={(product.metadata as any)?.analyzedAt || null}
+                        />
+                    </Box>
 
                     {/* before / after 갤러리 */}
                     {product.images.length === 0 ? (
