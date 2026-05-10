@@ -117,6 +117,94 @@ npm run dev:marketing
 - 시리즈 cron 동작
 - 결제 페이지
 
+---
+
+## Step 7. SSO 쿠키 도메인 통합 (pdp 와 합류)
+
+**조건**: pdpbot, designbot 등 다른 봇이 이미 `.amakers.co.kr` 도메인 쿠키 사용 중. 마케팅봇도 같은 도메인으로 변경하면 사용자가 한 번 로그인 → 모든 봇 자동 로그인.
+
+`apps/marketing/src/auth.ts` 또는 `auth.config.ts`:
+```diff
++  cookies: process.env.NEXTAUTH_URL?.includes('amakers.co.kr')
++    ? {
++        sessionToken: {
++          name: '__Secure-authjs.session-token',
++          options: { domain: '.amakers.co.kr', secure: true, sameSite: 'lax', httpOnly: true, path: '/' }
++        }
++      }
++    : {}
+```
+
+⚠️ **운영 영향**: 이 변경 배포 후 기존 사용자는 1회 자동 로그아웃 (쿠키 이름·도메인 변경). 사용자 공지 권장.
+
+---
+
+## Step 8. Credit 통합 결제 합류
+
+기존 마케팅봇의 발행 흐름을 Credit 차감으로 전환:
+
+```diff
+// 발행 publisher (markFailed 또는 SUCCESS 분기)
++ import { spendCredits, CREDIT_RATES } from '@amakers/billing'; // 또는 apps/marketing/src/lib/credit.ts
+
+  if (result.success) {
++   // 클라우드 발행 1 credit, 에이전트 발행 2 credits 차감
++   await spendCredits(userId, {
++     amount: CREDIT_RATES.PUBLISH_CLOUD,
++     bot: 'marketingbot',
++     action: 'PUBLISH',
++     refType: 'ScheduledTask',
++     refId: taskId,
++   });
+  }
+```
+
+기존 사용자에게 무료 credit 부여 (예: 가입 시 100 credits, 운영 사용자 마이그레이션 시 일괄 충전).
+
+---
+
+## Step 9. Vercel 프로젝트 전환
+
+기존 마케팅봇 Vercel 프로젝트 (`marketingbot`) 를 모노레포 import 로 변경:
+1. Vercel → marketingbot 프로젝트 → Settings → Git
+2. 기존 `c:\marketingbot` → `amakers-platform` 레포로 변경
+3. Root Directory: `apps/marketing`
+4. Build Command: `prisma migrate deploy && prisma generate && next build`
+5. 기존 환경변수 그대로 + `NEXTAUTH_URL=https://marketingbot.amakers.co.kr` 확인
+6. 새 deployment 시도 → 정상 빌드되면 production 적용
+
+⚠️ **rollback 계획**: 만약 새 빌드 fail 시 Vercel 의 "Promote to Production" 으로 이전 deployment 즉시 복원 가능. 마이그레이션 작업 시 기존 deployment URL 메모해 두기.
+
+---
+
+## Step 10. 옛 레포 archive
+
+이전 완료 후:
+1. `c:\marketingbot` 레포의 모든 PR/issue 정리
+2. README 에 "→ amakers-platform/apps/marketing 으로 이전됨" 알림 추가
+3. GitHub 에서 archive (read-only)
+4. 로컬 백업 보관 (`c:\marketingbot-archived-2026XXXX`)
+
+---
+
+## 마이그레이션 시점 체크리스트
+
+이전 작업 시작 전:
+- [ ] 마케팅봇 main 브랜치에 모든 변경 commit + push
+- [ ] Supabase DB Manual Backup
+- [ ] 운영 cron 일시 정지 (`/api/cron/*` 임시 disable)
+- [ ] 사용자에게 maintenance 공지 (15-30분 다운타임 예상)
+- [ ] amakers-platform 레포에 새 PR 만들기 (이전 작업용)
+- [ ] 작업 완료 후 dev 환경에서 전체 흐름 테스트
+
+이전 작업 후:
+- [ ] dev 서버에서 로그인 / 채널 / 캠페인 / 발행 / 결제 모두 동작 확인
+- [ ] Vercel preview 배포 후 production 동일 검증
+- [ ] DNS 전환 (마케팅봇 도메인 → 새 Vercel 프로젝트)
+- [ ] cron 재활성화
+- [ ] 옛 marketingbot 레포 archive
+- [ ] 사용자 공지: "이제 한 번 로그인 → 모든 봇 (pdpbot, designbot, ...) 자동 로그인"
+
 ## Step 7. 배포
 
 Vercel 프로젝트 설정 변경:
