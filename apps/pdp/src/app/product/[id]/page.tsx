@@ -10,6 +10,7 @@ import Link from 'next/link';
 import dayjs from 'dayjs';
 import ProductAnalysis from '@/components/ProductAnalysis';
 import RecomposeForm from '@/components/RecomposeForm';
+import GeneratedPageOutline from '@/components/GeneratedPageOutline';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,6 +126,14 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                             productId={product.id}
                             initialAnalysis={(product.metadata as any)?.analysis || null}
                             initialAnalyzedAt={(product.metadata as any)?.analyzedAt || null}
+                        />
+                    </Box>
+
+                    {/* 신규 상세페이지 outline 자동 생성 (Phase 3.1) */}
+                    <Box mb="lg">
+                        <GeneratedPageOutline
+                            productId={product.id}
+                            initial={(product.metadata as any)?.generatedPage || null}
                         />
                     </Box>
 
