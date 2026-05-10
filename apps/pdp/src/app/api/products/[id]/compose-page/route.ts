@@ -3,13 +3,7 @@
  *
  * Phase 3.3 — 생성된 outline + 섹션 이미지들 → 모바일 상세페이지 1장 PNG.
  *
- * 동작:
- *   1) Product.metadata.generatedPage 확인 (없으면 400)
- *   2) Sharp 로 모든 섹션을 위→아래로 composite
- *   3) R2 업로드 → OutputImage(mode='ai_generate', metadata.phase='3.3') 저장
- *   4) Product.metadata.composedPageUrl 갱신
- *
- * 비용: 1 credit (Sharp local 합성, R2 PUT 비용만).
+ * 비용: 1 credit (Sharp local 합성. BYOK 영향 X — Sharp 는 운영자 인프라).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -17,7 +11,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { composeFullPage } from '@/lib/pipeline/compose-page';
 import { uploadToR2, isR2Configured } from '@/lib/storage/r2';
-import { spendCredits, addCredits } from '@/lib/credit';
+import { withCreditRefund } from '@/lib/credit';
 import type { GeneratedPageOutline } from '@/lib/pipeline/generate-outline';
 
 export const maxDuration = 90;
@@ -43,71 +37,63 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
         return NextResponse.json({ error: '먼저 outline 을 생성하세요' }, { status: 400 });
     }
 
-    const spend = await spendCredits(userId, {
-        amount: COMPOSE_COST,
-        bot: 'pdpbot',
-        action: 'COMPOSE',
-        refType: 'Product',
-        refId: product.id,
-        metadata: { phase: '3.3', sectionsCount: outline.sections.length },
-    });
-    if (!spend.ok) {
-        return NextResponse.json({ error: spend.error || '잔액 부족' }, { status: 402 });
-    }
-
     try {
-        const { buffer, width, height } = await composeFullPage(outline as any);
-
-        const key = `pdp/${userId}/${product.id}/composed-page-${Date.now()}.png`;
-        const r2Url = await uploadToR2(key, buffer, 'image/png');
-
-        const output = await prisma.outputImage.create({
-            data: {
-                productId: product.id,
-                sourceImageId: null,
-                r2Url,
-                width,
-                height,
-                mode: 'ai_generate',
-                creditsUsed: COMPOSE_COST,
-                metadata: {
-                    phase: '3.3',
-                    type: 'composed-page',
-                    sectionsCount: outline.sections.length,
-                } as any,
+        const guarded = await withCreditRefund(
+            userId,
+            {
+                action: 'COMPOSE',
+                baseCost: COMPOSE_COST,
+                bot: 'pdpbot',
+                refType: 'Product',
+                refId: product.id,
+                metadata: { phase: '3.3', sectionsCount: outline.sections.length },
             },
-        });
+            async () => {
+                const { buffer, width, height } = await composeFullPage(outline as any);
 
-        await prisma.product.update({
-            where: { id: product.id },
-            data: {
-                metadata: {
-                    ...meta,
-                    composedPageUrl: r2Url,
-                    composedPageOutputId: output.id,
-                    composedPageAt: new Date().toISOString(),
-                } as any,
+                const key = `pdp/${userId}/${product.id}/composed-page-${Date.now()}.png`;
+                const r2Url = await uploadToR2(key, buffer, 'image/png');
+
+                const output = await prisma.outputImage.create({
+                    data: {
+                        productId: product.id,
+                        sourceImageId: null,
+                        r2Url,
+                        width,
+                        height,
+                        mode: 'ai_generate',
+                        creditsUsed: COMPOSE_COST,
+                        metadata: { phase: '3.3', type: 'composed-page', sectionsCount: outline.sections.length } as any,
+                    },
+                });
+
+                await prisma.product.update({
+                    where: { id: product.id },
+                    data: {
+                        metadata: {
+                            ...meta,
+                            composedPageUrl: r2Url,
+                            composedPageOutputId: output.id,
+                            composedPageAt: new Date().toISOString(),
+                        } as any,
+                    },
+                });
+
+                return { outputImageId: output.id, r2Url, width, height };
             },
-        });
+        );
 
         return NextResponse.json({
             ok: true,
-            outputImageId: output.id,
-            r2Url,
-            width,
-            height,
-            creditsUsed: COMPOSE_COST,
-            balanceAfter: spend.balanceAfter,
+            ...guarded.result,
+            creditsUsed: guarded.creditsUsed,
+            balanceAfter: guarded.balanceAfter,
         });
     } catch (e: any) {
         console.error('[/api/products/compose-page] error', e);
-        await addCredits(userId, COMPOSE_COST, 'pdpbot', 'REFUND', {
-            reason: 'compose-page failed',
-            error: e?.message,
-        }).catch(() => {});
         return NextResponse.json(
-            { error: e?.message || '페이지 합성 실패 (credits 환불됨)' },
-            { status: 500 },
+            { error: e?.message || '페이지 합성 실패' },
+            { status: e?.status === 402 ? 402 : 500 },
         );
     }
 }

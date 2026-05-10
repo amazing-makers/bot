@@ -61,7 +61,9 @@ export async function composeWithTranslations(
     return img.composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toBuffer();
 }
 
-function escapeXml(s: string): string {
+// ===== SVG 텍스트 유틸 — compose-page.ts 도 import 해서 재사용 =====
+
+export function escapeXml(s: string): string {
     return s
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -70,46 +72,32 @@ function escapeXml(s: string): string {
         .replace(/'/g, '&apos;');
 }
 
-/**
- * 한글 (전각) 1글자 ≈ 폰트 크기 1배 width 차지. 라틴 (반각) 0.5배 추정.
- * 정확한 측정은 어렵지만 통상적인 추정으로 충분.
- */
-function estimateTextWidth(s: string, fontSize: number): number {
+/** 한글 (전각) 1글자 ≈ 폰트 크기 1배 width. 라틴 (반각) 0.55배 추정. */
+export function estimateTextWidth(s: string, fontSize: number): number {
     let width = 0;
     for (const ch of s) {
-        // 한글 / 한자 / 일본어 = 전각, 영문 / 숫자 / 공백 = 반각
         const isFullWidth = /[가-힯一-鿿぀-ヿ＀-￯]/.test(ch);
         width += fontSize * (isFullWidth ? 1.0 : 0.55);
     }
     return width;
 }
 
-/**
- * bbox 안에 텍스트가 잘 맞도록 폰트 크기 자동 조정.
- * 시작: bboxH * 0.7 (한 줄 가정).
- * 너무 길어 한 줄에 안 맞으면 단계적으로 줄임 (최소 10px).
- * bboxH 가 충분히 크면 다중 줄 wrap 으로 가능 (별도 함수가 처리) — 여기서는 한 줄 폰트 size 결정.
- */
-function computeFontSize(text: string, maxWidth: number, maxHeight: number): number {
+/** bbox 안에 텍스트가 맞도록 폰트 크기 자동 조정 (최소 10px). */
+export function computeFontSize(text: string, maxWidth: number, maxHeight: number): number {
     let fontSize = Math.max(10, Math.floor(maxHeight * 0.7));
-    // 한 줄 가정 width 가 maxWidth 의 80% 넘으면 — 줄바꿈 또는 폰트 축소.
-    // 줄바꿈으로 처리하더라도 폰트 자체는 너무 크지 않게 cap.
     while (fontSize > 10 && estimateTextWidth(text, fontSize) > maxWidth * 2.5) {
         fontSize -= 1;
     }
     return fontSize;
 }
 
-/**
- * 한글 텍스트를 maxWidth 안에서 줄바꿈.
- * 단어 단위 (공백) 우선, 단어가 너무 길면 글자 단위.
- * bbox 가 짧아 1 줄에 안 맞으면 여러 줄 반환.
- */
-function wrapKoreanText(text: string, maxWidth: number, fontSize: number): string[] {
+/** 단어 (공백) 단위 우선 줄바꿈. 단어가 길면 글자 단위로 폴백. */
+export function wrapText(text: string, maxWidth: number, fontSize: number): string[] {
+    if (!text) return [];
     if (estimateTextWidth(text, fontSize) <= maxWidth) return [text];
 
     const lines: string[] = [];
-    const words = text.split(/(\s+)/); // 공백 유지하면서 split
+    const words = text.split(/(\s+)/);
     let current = '';
 
     for (const word of words) {
@@ -118,7 +106,6 @@ function wrapKoreanText(text: string, maxWidth: number, fontSize: number): strin
             current = candidate;
         } else {
             if (current) lines.push(current.trim());
-            // 단어 자체가 길면 글자 단위 분할
             if (estimateTextWidth(word, fontSize) > maxWidth) {
                 let chunk = '';
                 for (const ch of word) {
@@ -138,3 +125,6 @@ function wrapKoreanText(text: string, maxWidth: number, fontSize: number): strin
     if (current.trim()) lines.push(current.trim());
     return lines.length > 0 ? lines : [text];
 }
+
+/** @deprecated wrapText alias (Phase 1 호출 호환성). */
+const wrapKoreanText = wrapText;

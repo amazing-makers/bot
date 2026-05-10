@@ -142,6 +142,80 @@ export async function getBalance(userId: string): Promise<number> {
     return credit?.balance ?? 0;
 }
 
+// ===== BYOK 통합 차감 + 자동 환불 wrapper =====
+
+import type { ActionKind } from './byok-cost';
+import { resolveByokForAction, computeByokAdjustedCost } from './byok-cost';
+
+export interface CreditGuardResult<T> {
+    result: T;
+    /** BYOK 적용 후 실제 차감 (BYOK 면 0). */
+    creditsUsed: number;
+    /** 차감 후 잔액 (BYOK 면 변동 X). */
+    balanceAfter: number;
+    /** 어떤 provider 가 BYOK 였는지 (UI 응답용). */
+    byok: boolean;
+}
+
+/**
+ * BYOK 체크 → spendCredits → 작업 실행 → 실패 시 자동 환불.
+ *
+ * 5개 routes (analyze, generate-page, generate-section-image, compose-page, process)
+ * 의 동일한 try/catch + addCredits(REFUND) 보일러플레이트를 한 곳으로.
+ *
+ * @throws SpendError 잔액 부족 (route 에서 402 응답)
+ * @throws Error      work() 가 throw 한 에러 (이미 환불됨)
+ */
+export async function withCreditRefund<T>(
+    userId: string,
+    opts: {
+        action: ActionKind;
+        baseCost: number;
+        bot: SpendInput['bot'];
+        refType?: string;
+        refId?: string;
+        metadata?: Record<string, unknown>;
+    },
+    work: (ctx: { byok: boolean; userKey: string | null }) => Promise<T>,
+): Promise<CreditGuardResult<T>> {
+    const { byok, userKey } = await resolveByokForAction(userId, opts.action);
+    const adjustedCost = computeByokAdjustedCost(opts.baseCost, byok);
+
+    let spend: SpendResult;
+    if (adjustedCost > 0) {
+        spend = await spendCredits(userId, {
+            amount: adjustedCost,
+            bot: opts.bot,
+            action: opts.action === 'OUTLINE' ? 'TRANSLATE'
+                  : opts.action === 'ANALYZE' ? 'IMAGE_GEN'
+                  : opts.action as SpendAction,
+            refType: opts.refType,
+            refId: opts.refId,
+            metadata: { ...opts.metadata, byok, kind: opts.action },
+        });
+        if (!spend.ok) {
+            const e: any = new Error(spend.error || '잔액 부족');
+            e.status = 402;
+            throw e;
+        }
+    } else {
+        spend = { ok: true, balanceBefore: 0, balanceAfter: 0 };
+    }
+
+    try {
+        const result = await work({ byok, userKey });
+        return { result, creditsUsed: adjustedCost, balanceAfter: spend.balanceAfter, byok };
+    } catch (e: any) {
+        if (adjustedCost > 0) {
+            await addCredits(userId, adjustedCost, opts.bot, 'REFUND', {
+                reason: `${opts.action} failed`,
+                error: e?.message,
+            }).catch(() => {});
+        }
+        throw e;
+    }
+}
+
 // ===== 단가표 (조정 시 한 곳만) =====
 export const CREDIT_RATES = {
     OCR: 5,           // 이미지 1장 OCR

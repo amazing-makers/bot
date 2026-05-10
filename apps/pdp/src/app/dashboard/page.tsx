@@ -7,7 +7,7 @@ import {
     AppShell, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box,
     Image, Anchor, Paper,
 } from '@mantine/core';
-import { IconWand, IconPlus, IconCoin, IconClock, IconCheck, IconExternalLink, IconKey } from '@tabler/icons-react';
+import { IconWand, IconPlus, IconCoin, IconClock, IconCheck, IconExternalLink, IconKey, IconBuildingStore } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 
@@ -73,6 +73,16 @@ export default async function DashboardPage() {
                                 leftSection={<IconKey size={14} />}
                             >
                                 BYOK {byokCount > 0 && `(${byokCount}/3)`}
+                            </Button>
+                            <Button
+                                component={Link}
+                                href="/dashboard/channels"
+                                size="xs"
+                                variant="subtle"
+                                color="orange"
+                                leftSection={<IconBuildingStore size={14} />}
+                            >
+                                채널
                             </Button>
                             <Text size="sm" c="dimmed">{session?.user?.email}</Text>
                         </Group>

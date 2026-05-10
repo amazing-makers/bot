@@ -101,7 +101,7 @@ export async function saveUserApiKey(
 
 /**
  * 사용자의 키 조회 (복호화). 없으면 null.
- * lastUsedAt 도 같이 업데이트.
+ * lastUsedAt 도 같이 업데이트 (1시간 이상 지난 경우만 — 매 호출 update 방지).
  */
 export async function getUserApiKey(
     userId: string,
@@ -113,16 +113,50 @@ export async function getUserApiKey(
     if (!row) return null;
     try {
         const plaintext = decrypt(row.encryptedKey);
-        // fire-and-forget — lastUsedAt 갱신 실패해도 호출자에 영향 X
-        (prisma as any).userApiKey.update({
-            where: { id: row.id },
-            data: { lastUsedAt: new Date() },
-        }).catch(() => {});
+        const lastUsed = row.lastUsedAt ? new Date(row.lastUsedAt).getTime() : 0;
+        if (Date.now() - lastUsed > 3600_000) {
+            (prisma as any).userApiKey.update({
+                where: { id: row.id },
+                data: { lastUsedAt: new Date() },
+            }).catch(() => {});
+        }
         return plaintext;
     } catch (e) {
         console.error('[api-keys] 복호화 실패', e);
         return null;
     }
+}
+
+/**
+ * 여러 provider 의 키를 한 번의 DB 쿼리로 조회 — process route 처럼 3개 동시 필요한 경우.
+ * 결과: provider → plaintext key (없으면 entry 없음).
+ */
+export async function getUserApiKeysBulk(
+    userId: string,
+    providers: Provider[],
+): Promise<Partial<Record<Provider, string>>> {
+    if (providers.length === 0) return {};
+    const rows = await (prisma as any).userApiKey.findMany({
+        where: { userId, provider: { in: providers } },
+    });
+    const out: Partial<Record<Provider, string>> = {};
+    const stale: string[] = [];
+    for (const row of rows) {
+        try {
+            out[row.provider as Provider] = decrypt(row.encryptedKey);
+            const lastUsed = row.lastUsedAt ? new Date(row.lastUsedAt).getTime() : 0;
+            if (Date.now() - lastUsed > 3600_000) stale.push(row.id);
+        } catch (e) {
+            console.error('[api-keys] bulk 복호화 실패', row.provider, e);
+        }
+    }
+    if (stale.length > 0) {
+        (prisma as any).userApiKey.updateMany({
+            where: { id: { in: stale } },
+            data: { lastUsedAt: new Date() },
+        }).catch(() => {});
+    }
+    return out;
 }
 
 /** 사용자의 BYOK 상태 한 번에 조회 (UI 표시 + credit 차감 분기용). */

@@ -17,32 +17,31 @@ import { fetchAsBuffer } from '../storage/r2';
  * URL 이면 fetch, stream/FileOutput 이면 직접 read.
  */
 export async function replicateOutputToBuffer(output: any): Promise<Buffer> {
-    // 1) string URL
-    if (typeof output === 'string') {
-        return fetchAsBuffer(output);
-    }
-
-    // 2) string[] (첫 번째)
-    if (Array.isArray(output) && typeof output[0] === 'string') {
-        return fetchAsBuffer(output[0]);
-    }
-
-    // 3) FileOutput class — 0.30+ — has url() method
-    if (output && typeof output.url === 'function') {
-        try {
-            const url = output.url();
-            // url() 가 URL 객체 반환할 수도 있음
-            return fetchAsBuffer(typeof url === 'string' ? url : url.toString());
-        } catch (e) {
-            // url() fail 하면 stream 으로 시도
-        }
-    }
-
-    // 4) FileOutput class — blob() method
+    // 1) FileOutput class — blob() method 우선 (CDN fetch 한 번 절약 — Replicate 가 이미 갖고 있는 데이터)
     if (output && typeof output.blob === 'function') {
         const blob = await output.blob();
         const ab = await blob.arrayBuffer();
         return Buffer.from(ab);
+    }
+
+    // 2) string URL
+    if (typeof output === 'string') {
+        return fetchAsBuffer(output);
+    }
+
+    // 3) string[] (첫 번째)
+    if (Array.isArray(output) && typeof output[0] === 'string') {
+        return fetchAsBuffer(output[0]);
+    }
+
+    // 4) FileOutput class — url() fallback (CDN 한 번 더 fetch)
+    if (output && typeof output.url === 'function') {
+        try {
+            const url = output.url();
+            return fetchAsBuffer(typeof url === 'string' ? url : url.toString());
+        } catch {
+            // url() fail 하면 stream 으로 시도
+        }
     }
 
     // 5) ReadableStream / async iterable

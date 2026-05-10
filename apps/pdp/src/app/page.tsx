@@ -259,6 +259,14 @@ export default function HomePage() {
                             <Text size="xs" c="dimmed">
                                 상품 페이지 URL 을 그대로 붙여넣으세요. 쿠팡·타오바오·1688·아마존·네이버 등 자동 감지.
                             </Text>
+                            <Box>
+                                <Text size="11px" c="dimmed">
+                                    💡 처음 이시면: 실제 사이트에서 관심 상품 페이지 열고 주소창 URL 복사 → 여기 붙여넣기.<br />
+                                    예시 형식 — <code style={{ fontSize: 11 }}>item.taobao.com/item.htm?id=...</code>{' '}
+                                    <code style={{ fontSize: 11 }}>detail.1688.com/offer/...</code>{' '}
+                                    <code style={{ fontSize: 11 }}>coupang.com/vp/products/...</code>
+                                </Text>
+                            </Box>
                         </Stack>
                     </Card>
 

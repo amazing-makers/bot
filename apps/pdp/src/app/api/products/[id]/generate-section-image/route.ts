@@ -5,19 +5,9 @@
  *
  * Body:
  *   - sectionIdx:   number (Product.metadata.generatedPage.sections 의 index)
- *   - imagePrompt?: string (override — 사용자가 prompt 수정한 경우)
+ *   - imagePrompt?: string (override)
  *
- * 동작:
- *   1) Product 조회 → metadata.generatedPage 확인
- *   2) sections[sectionIdx] 존재 + imagePrompt 있는지 확인
- *   3) credits 차감 (20)
- *   4) FLUX 1.1 Pro 호출
- *   5) R2 업로드
- *   6) OutputImage(mode='ai_generate') 저장 + Product.metadata.generatedPage.sections[idx].generatedImageUrl 업데이트
- *
- * 비용: 20 credits / 섹션
- *
- * Note: 한 번에 모든 섹션 batch 처리는 user 가 outline 검토 후 원하는 섹션만 생성해야 비용 효율적이라 단일 섹션만 지원.
+ * 비용: 20 credits (BYOK Replicate 시 0).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -25,8 +15,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { generateSectionImage } from '@/lib/pipeline/generate-section-image';
 import { uploadToR2, isR2Configured } from '@/lib/storage/r2';
-import { spendCredits, addCredits } from '@/lib/credit';
-import { resolveByokForAction, computeByokAdjustedCost } from '@/lib/byok-cost';
+import { withCreditRefund } from '@/lib/credit';
 import type { GeneratedPageOutline, PageSection, SectionType } from '@/lib/pipeline/generate-outline';
 
 export const maxDuration = 120;
@@ -39,10 +28,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!userId) return NextResponse.json({ error: '로그인 필요' }, { status: 401 });
 
     if (!isR2Configured()) {
-        return NextResponse.json(
-            { error: 'R2 storage 가 설정되지 않았습니다 — env 변수 확인' },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: 'R2 storage 가 설정되지 않았습니다 — env 변수 확인' }, { status: 500 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -72,96 +58,66 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         return NextResponse.json({ error: '이 섹션은 imagePrompt 가 없습니다 (텍스트 only 섹션)' }, { status: 400 });
     }
 
-    // BYOK 체크 — Replicate 키 있으면 0 credits
-    const { byok, userKey } = await resolveByokForAction(userId, 'IMAGE_GEN');
-    const adjustedCost = computeByokAdjustedCost(SECTION_IMAGE_COST, byok);
-
-    // credits 차감 (BYOK 면 0)
-    const spend = await spendCredits(userId, {
-        amount: adjustedCost,
-        bot: 'pdpbot',
-        action: 'IMAGE_GEN',
-        refType: 'Product',
-        refId: product.id,
-        metadata: { phase: '3.2', sectionIdx, sectionType: section.type, byok },
-    });
-    if (!spend.ok) {
-        return NextResponse.json({ error: spend.error || '잔액 부족' }, { status: 402 });
-    }
-
     try {
-        const { buffer, width, height, modelUsed } = await generateSectionImage({
-            sectionType: section.type as SectionType,
-            imagePrompt,
-            userReplicateKey: userKey,
-        });
-
-        // R2 업로드
-        const key = `pdp/${userId}/${product.id}/section-${sectionIdx}-${Date.now()}.png`;
-        const r2Url = await uploadToR2(key, buffer, 'image/png');
-
-        // OutputImage 저장 (mode='ai_generate')
-        const output = await prisma.outputImage.create({
-            data: {
-                productId: product.id,
-                sourceImageId: null,
-                r2Url,
-                width,
-                height,
-                mode: 'ai_generate',
-                creditsUsed: SECTION_IMAGE_COST,
-                metadata: {
-                    phase: '3.2',
-                    sectionIdx,
-                    sectionType: section.type,
+        const guarded = await withCreditRefund(
+            userId,
+            {
+                action: 'IMAGE_GEN',
+                baseCost: SECTION_IMAGE_COST,
+                bot: 'pdpbot',
+                refType: 'Product',
+                refId: product.id,
+                metadata: { phase: '3.2', sectionIdx, sectionType: section.type },
+            },
+            async ({ userKey }) => {
+                const { buffer, width, height, modelUsed } = await generateSectionImage({
+                    sectionType: section.type as SectionType,
                     imagePrompt,
-                    modelUsed,
-                } as any,
-            },
-        });
+                    userReplicateKey: userKey,
+                });
 
-        // Product.metadata.generatedPage.sections[idx] 에 이미지 URL 추가
-        const updatedSections = outline.sections.map((s, i) =>
-            i === sectionIdx
-                ? { ...s, generatedImageUrl: r2Url, generatedImageOutputId: output.id, imagePrompt }
-                : s,
-        );
-        await prisma.product.update({
-            where: { id: product.id },
-            data: {
-                metadata: {
-                    ...meta,
-                    generatedPage: {
-                        ...outline,
-                        sections: updatedSections,
+                const key = `pdp/${userId}/${product.id}/section-${sectionIdx}-${Date.now()}.png`;
+                const r2Url = await uploadToR2(key, buffer, 'image/png');
+
+                const output = await prisma.outputImage.create({
+                    data: {
+                        productId: product.id,
+                        sourceImageId: null,
+                        r2Url,
+                        width,
+                        height,
+                        mode: 'ai_generate',
+                        creditsUsed: SECTION_IMAGE_COST,
+                        metadata: { phase: '3.2', sectionIdx, sectionType: section.type, imagePrompt, modelUsed } as any,
                     },
-                } as any,
+                });
+
+                const updatedSections = outline.sections.map((s, i) =>
+                    i === sectionIdx
+                        ? { ...s, generatedImageUrl: r2Url, generatedImageOutputId: output.id, imagePrompt }
+                        : s,
+                );
+                await prisma.product.update({
+                    where: { id: product.id },
+                    data: { metadata: { ...meta, generatedPage: { ...outline, sections: updatedSections } } as any },
+                });
+
+                return { outputImageId: output.id, r2Url, width, height };
             },
-        });
+        );
 
         return NextResponse.json({
             ok: true,
-            outputImageId: output.id,
-            r2Url,
-            width,
-            height,
-            creditsUsed: adjustedCost,
-            byok,
-            balanceAfter: spend.balanceAfter,
+            ...guarded.result,
+            creditsUsed: guarded.creditsUsed,
+            byok: guarded.byok,
+            balanceAfter: guarded.balanceAfter,
         });
     } catch (e: any) {
         console.error('[/api/products/generate-section-image] error', e);
-        // 실패 시 환불
-        if (adjustedCost > 0) {
-            await addCredits(userId, adjustedCost, 'pdpbot', 'REFUND', {
-                reason: 'generate-section-image failed',
-                sectionIdx,
-                error: e?.message,
-            }).catch(() => {});
-        }
         return NextResponse.json(
-            { error: e?.message || '이미지 생성 실패 (credits 환불됨)' },
-            { status: 500 },
+            { error: e?.message || '이미지 생성 실패' },
+            { status: e?.status === 402 ? 402 : 500 },
         );
     }
 }

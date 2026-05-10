@@ -25,6 +25,7 @@ import sharp from 'sharp';
 import { fetchAsBuffer } from '../storage/r2';
 import type { GeneratedPageOutline, PageSection } from './generate-outline';
 import { getKoreanFontStyle, KOREAN_FONT_FAMILY } from './fonts';
+import { escapeXml, estimateTextWidth, wrapText } from './compose';
 
 const PAGE_WIDTH = 1080;
 const PADDING_X = 48;
@@ -139,52 +140,29 @@ function sectionTypeColor(type: PageSection['type']): string {
 export async function composeFullPage(
     outline: GeneratedPageOutline & { sections: SectionWithImage[] },
 ): Promise<{ buffer: Buffer; width: number; height: number }> {
-    const rendered: RenderedSection[] = [];
+    // 모든 섹션을 병렬로 렌더링 — text SVG + 섹션 이미지 fetch+resize 동시.
+    // R2 fetch 6-9개 × 100-300ms 가 sequential 일 때 ~1-3초 → parallel 로 ~300ms.
+    const rendered: RenderedSection[] = await Promise.all(
+        outline.sections.map(async (section): Promise<RenderedSection> => {
+            const [text, imagePart] = await Promise.all([
+                renderSectionText(section),
+                renderSectionImage(section),
+            ]);
+            return {
+                textBuffer: text.buffer,
+                textHeight: text.height,
+                imageBuffer: imagePart?.buffer,
+                imageHeight: imagePart?.height,
+            };
+        }),
+    );
 
-    for (const section of outline.sections) {
-        const text = await renderSectionText(section);
-        let imageBuffer: Buffer | undefined;
-        let imageHeight: number | undefined;
-
-        if (section.generatedImageUrl) {
-            try {
-                const raw = await fetchAsBuffer(section.generatedImageUrl);
-                // 1080px 폭 강제 — height 는 비율 유지.
-                const resized = await sharp(raw).resize({ width: PAGE_WIDTH }).png().toBuffer();
-                const meta = await sharp(resized).metadata();
-                imageBuffer = resized;
-                imageHeight = meta.height || 0;
-            } catch (e) {
-                console.warn('[composeFullPage] 섹션 이미지 fetch 실패, 텍스트만 합성', e);
-            }
-        }
-
-        rendered.push({
-            textBuffer: text.buffer,
-            textHeight: text.height,
-            imageBuffer,
-            imageHeight,
-        });
-    }
-
-    // 총 높이 계산: 섹션마다 (이미지 height + 텍스트 height) + 섹션 사이 gap.
-    let totalHeight = SECTION_GAP; // 상단 여백
+    let totalHeight = SECTION_GAP;
     for (const r of rendered) {
         if (r.imageBuffer && r.imageHeight) totalHeight += r.imageHeight;
         totalHeight += r.textHeight + SECTION_GAP;
     }
 
-    // 흰 캔버스 생성
-    const canvas = sharp({
-        create: {
-            width: PAGE_WIDTH,
-            height: totalHeight,
-            channels: 3,
-            background: { r: 255, g: 255, b: 255 },
-        },
-    });
-
-    // 모든 섹션을 위에서 아래로 composite
     const composites: sharp.OverlayOptions[] = [];
     let cursorY = SECTION_GAP;
     for (const r of rendered) {
@@ -196,60 +174,27 @@ export async function composeFullPage(
         cursorY += r.textHeight + SECTION_GAP;
     }
 
-    const buffer = await canvas.composite(composites).png({ quality: 95 }).toBuffer();
+    const buffer = await sharp({
+        create: { width: PAGE_WIDTH, height: totalHeight, channels: 3, background: { r: 255, g: 255, b: 255 } },
+    }).composite(composites).png({ compressionLevel: 6 }).toBuffer();
+
     return { buffer, width: PAGE_WIDTH, height: totalHeight };
 }
 
-// ===== 텍스트 wrap/측정 유틸 (compose.ts 의 헬퍼와 동일 — 분리 유지) =====
-
-function escapeXml(s: string): string {
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
-
-function estimateTextWidth(s: string, fontSize: number): number {
-    let width = 0;
-    for (const ch of s) {
-        const isFullWidth = /[가-힯一-鿿぀-ヿ＀-￯]/.test(ch);
-        width += fontSize * (isFullWidth ? 1.0 : 0.55);
+/** 섹션 이미지 fetch + 1080px resize. resolveWithObject 로 두 번째 sharp() 호출 제거. */
+async function renderSectionImage(section: SectionWithImage): Promise<{ buffer: Buffer; height: number } | null> {
+    if (!section.generatedImageUrl) return null;
+    try {
+        const raw = await fetchAsBuffer(section.generatedImageUrl);
+        const { data, info } = await sharp(raw)
+            .resize({ width: PAGE_WIDTH })
+            .png()
+            .toBuffer({ resolveWithObject: true });
+        return { buffer: data, height: info.height };
+    } catch (e) {
+        console.warn('[composeFullPage] 섹션 이미지 fetch 실패, 텍스트만', e);
+        return null;
     }
-    return width;
 }
 
-function wrapText(text: string, maxWidth: number, fontSize: number): string[] {
-    if (!text) return [];
-    if (estimateTextWidth(text, fontSize) <= maxWidth) return [text];
-
-    const lines: string[] = [];
-    const words = text.split(/(\s+)/);
-    let current = '';
-
-    for (const word of words) {
-        const candidate = current + word;
-        if (estimateTextWidth(candidate, fontSize) <= maxWidth) {
-            current = candidate;
-        } else {
-            if (current) lines.push(current.trim());
-            if (estimateTextWidth(word, fontSize) > maxWidth) {
-                let chunk = '';
-                for (const ch of word) {
-                    if (estimateTextWidth(chunk + ch, fontSize) <= maxWidth) {
-                        chunk += ch;
-                    } else {
-                        if (chunk) lines.push(chunk);
-                        chunk = ch;
-                    }
-                }
-                current = chunk;
-            } else {
-                current = word;
-            }
-        }
-    }
-    if (current.trim()) lines.push(current.trim());
-    return lines.length > 0 ? lines : [text];
-}
+// (escapeXml / estimateTextWidth / wrapText 는 compose.ts 에서 import — 단일 source)

@@ -38,8 +38,9 @@ import { buildMaskPng, runInpaint } from '@/lib/pipeline/inpaint';
 import { translateRegionsBatch } from '@/lib/pipeline/translate';
 import { composeWithTranslations, type ComposeRegion } from '@/lib/pipeline/compose';
 import { uploadToR2, fetchAsBuffer, isR2Configured } from '@/lib/storage/r2';
-import { spendCredits, CREDIT_RATES } from '@/lib/credit';
-import { resolveByokForAction, computeByokAdjustedCost } from '@/lib/byok-cost';
+import { spendCredits, addCredits, CREDIT_RATES } from '@/lib/credit';
+import { computeByokAdjustedCost } from '@/lib/byok-cost';
+import { getUserApiKeysBulk } from '@/lib/api-keys';
 
 export const maxDuration = 300; // 5분 (FLUX inpainting 이 오래 걸릴 수 있음)
 
@@ -94,15 +95,16 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // BYOK 체크 — 3개 프로바이더 한 번에 조회
-    const ocrByokInfo = await resolveByokForAction(userId, 'OCR');
-    const translateByokInfo = await resolveByokForAction(userId, 'TRANSLATE');
-    const inpaintByokInfo = await resolveByokForAction(userId, 'INPAINT');
+    // BYOK 체크 — 3개 프로바이더 한 번의 DB 쿼리로 일괄 조회 (sequential await x3 → 단일 findMany)
+    const userKeys = await getUserApiKeysBulk(userId, ['openai', 'anthropic', 'replicate']);
+    const ocrUserKey = userKeys.openai ?? null;
+    const translateUserKey = userKeys.anthropic ?? null;
+    const inpaintUserKey = userKeys.replicate ?? null;
 
-    const ocrCost = computeByokAdjustedCost(CREDIT_RATES.OCR, ocrByokInfo.byok);
-    const translateCost = computeByokAdjustedCost(CREDIT_RATES.TRANSLATE, translateByokInfo.byok);
-    const inpaintCost = computeByokAdjustedCost(CREDIT_RATES.INPAINT, inpaintByokInfo.byok);
-    const composeCost = CREDIT_RATES.COMPOSE; // Sharp local — BYOK 영향 X
+    const ocrCost = computeByokAdjustedCost(CREDIT_RATES.OCR, !!ocrUserKey);
+    const translateCost = computeByokAdjustedCost(CREDIT_RATES.TRANSLATE, !!translateUserKey);
+    const inpaintCost = computeByokAdjustedCost(CREDIT_RATES.INPAINT, !!inpaintUserKey);
+    const composeCost = CREDIT_RATES.COMPOSE;
 
     let creditsUsed = 0;
     const taskId = randomUUID();
@@ -131,12 +133,12 @@ export async function POST(req: NextRequest) {
         });
 
         // === Step 2: GPT-4 Vision OCR ===
-        const regions = await detectTextRegions(originalR2Url, ocrByokInfo.userKey);
+        const regions = await detectTextRegions(originalR2Url, ocrUserKey);
         const ocrSpend = await spendCredits(userId, {
             amount: ocrCost,
             bot: 'pdpbot',
             action: 'OCR',
-            metadata: { taskId, regionCount: regions.length, byok: ocrByokInfo.byok },
+            metadata: { taskId, regionCount: regions.length, byok: !!ocrUserKey },
         });
         if (!ocrSpend.ok) throw new Error(ocrSpend.error || '잔액 부족 (OCR)');
         creditsUsed += ocrCost;
@@ -166,12 +168,12 @@ export async function POST(req: NextRequest) {
         }
 
         // === Step 3: Claude 일괄 번역 ===
-        const translations = await translateRegionsBatch(regions, translateByokInfo.userKey);
+        const translations = await translateRegionsBatch(regions, translateUserKey);
         const translateSpend = await spendCredits(userId, {
             amount: translateCost,
             bot: 'pdpbot',
             action: 'TRANSLATE',
-            metadata: { taskId, regionCount: regions.length, byok: translateByokInfo.byok },
+            metadata: { taskId, regionCount: regions.length, byok: !!translateUserKey },
         });
         if (!translateSpend.ok) throw new Error(translateSpend.error || '잔액 부족 (TRANSLATE)');
         creditsUsed += translateCost;
@@ -203,13 +205,13 @@ export async function POST(req: NextRequest) {
         const inpaintedBuf = await runInpaint({
             imageUrl: originalR2Url,
             maskUrl: maskR2Url,
-            userReplicateKey: inpaintByokInfo.userKey,
+            userReplicateKey: inpaintUserKey,
         });
         const inpaintSpend = await spendCredits(userId, {
             amount: inpaintCost,
             bot: 'pdpbot',
             action: 'INPAINT',
-            metadata: { taskId, byok: inpaintByokInfo.byok },
+            metadata: { taskId, byok: !!inpaintUserKey },
         });
         if (!inpaintSpend.ok) throw new Error(inpaintSpend.error || '잔액 부족 (INPAINT)');
         creditsUsed += inpaintCost;
@@ -273,8 +275,17 @@ export async function POST(req: NextRequest) {
         });
     } catch (e: any) {
         console.error('[/api/process] error', e);
+        // 부분 환불 — pipeline 도중 실패 시 이미 차감된 step 들 (OCR/TRANSLATE/INPAINT) 합계 환불.
+        // 사용자가 7단계 중 마지막 단계 실패해도 비용 부담 X (셀러 보호).
+        if (creditsUsed > 0) {
+            await addCredits(userId, creditsUsed, 'pdpbot', 'REFUND', {
+                reason: 'process pipeline failed',
+                taskId,
+                error: e?.message,
+            }).catch(() => {});
+        }
         return NextResponse.json(
-            { error: e?.message || '처리 실패', creditsUsed },
+            { error: e?.message || '처리 실패', creditsUsed: 0, refunded: creditsUsed },
             { status: 500 },
         );
     }

@@ -3,13 +3,11 @@
  *
  * Phase 3.1 — 상품 분석 결과 기반으로 신규 상세페이지 outline 자동 생성.
  *
- * 전제: Product.metadata.analysis 가 있어야 함 (없으면 먼저 /analyze 권장).
- *      없으면 자동으로 analyze 도 같이 (10 + 5 credits).
+ * 전제: Product.metadata.analysis 가 있어야 함. 없으면 자동 analyze (10 + 5 credits).
  *
- * Body: { userBrief?: string }  // 추가 요청 ('브랜드 톤 더 고급스럽게' 등)
+ * Body: { userBrief?: string }
  *
- * 비용: 5 credits (TRANSLATE 단가 재사용 — Claude Opus text only).
- *      analyze 도 자동 호출되면 +10 credits.
+ * 비용: 5 credits + (auto-analyze 시 10). BYOK Anthropic 시 모두 0.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -17,13 +15,12 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { generateOutline } from '@/lib/pipeline/generate-outline';
 import { analyzeProduct } from '@/lib/pipeline/analyze';
-import { spendCredits, CREDIT_RATES } from '@/lib/credit';
-import { resolveByokForAction, computeByokAdjustedCost } from '@/lib/byok-cost';
+import { withCreditRefund } from '@/lib/credit';
 
 export const maxDuration = 90;
 
 const OUTLINE_COST = 5;
-const ANALYZE_COST = 10; // auto-analyze 시
+const ANALYZE_COST = 10;
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
     const session = await auth();
@@ -32,11 +29,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const { id } = await ctx.params;
 
-    let userBrief: string | undefined;
-    try {
-        const body = await req.json().catch(() => ({}));
-        userBrief = body?.userBrief ? String(body.userBrief) : undefined;
-    } catch { /* body 없어도 OK */ }
+    const body = await req.json().catch(() => ({}));
+    const userBrief: string | undefined = body?.userBrief ? String(body.userBrief) : undefined;
 
     const product = await prisma.product.findFirst({
         where: { id, userId },
@@ -48,105 +42,101 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!product) return NextResponse.json({ error: 'Product 없음' }, { status: 404 });
 
     let analysis = (product.metadata as any)?.analysis;
-
-    // BYOK 체크 — analyze 와 outline 둘 다 anthropic 사용. 한 번만 조회.
-    const { byok: anthropicByok, userKey: anthropicKey } = await resolveByokForAction(userId, 'ANALYZE');
-    const adjustedAnalyzeCost = computeByokAdjustedCost(ANALYZE_COST, anthropicByok);
-    const adjustedOutlineCost = computeByokAdjustedCost(OUTLINE_COST, anthropicByok);
-    let totalAutoAnalyzeCost = 0;
-
-    // Step 0: analysis 없으면 먼저 자동 분석
-    if (!analysis) {
-        const imageUrl = product.outputImages[0]?.r2Url
-            || product.images[0]?.r2Url
-            || product.images[0]?.sourceUrl;
-        if (!imageUrl) {
-            return NextResponse.json({ error: '분석할 이미지가 없습니다' }, { status: 400 });
-        }
-
-        const spend = await spendCredits(userId, {
-            amount: adjustedAnalyzeCost,
-            bot: 'pdpbot',
-            action: 'IMAGE_GEN',
-            refType: 'Product',
-            refId: product.id,
-            metadata: { auto: true, parentAction: 'generate-page', byok: anthropicByok },
-        });
-        if (!spend.ok) return NextResponse.json({ error: spend.error || '잔액 부족 (analyze)' }, { status: 402 });
-
-        try {
-            analysis = await analyzeProduct({
-                imageUrl,
-                title: product.title || undefined,
-                sourceSite: product.source,
-                sourceUrl: product.sourceUrl,
-                userAnthropicKey: anthropicKey,
-            });
-            await prisma.product.update({
-                where: { id: product.id },
-                data: {
-                    metadata: {
-                        ...(product.metadata as any),
-                        analysis,
-                        analyzedAt: new Date().toISOString(),
-                    } as any,
-                },
-            });
-            totalAutoAnalyzeCost = adjustedAnalyzeCost;
-        } catch (e: any) {
-            const { addCredits } = await import('@/lib/credit');
-            if (adjustedAnalyzeCost > 0) {
-                await addCredits(userId, adjustedAnalyzeCost, 'pdpbot', 'REFUND', { reason: 'auto-analyze failed' }).catch(() => {});
-            }
-            return NextResponse.json({ error: 'analyze 실패: ' + (e?.message || '') }, { status: 500 });
-        }
-    }
-
-    // Step 1: outline 생성
-    const spend = await spendCredits(userId, {
-        amount: adjustedOutlineCost,
-        bot: 'pdpbot',
-        action: 'TRANSLATE', // text-only Claude → TRANSLATE 단가 재사용
-        refType: 'Product',
-        refId: product.id,
-        metadata: { kind: 'outline', byok: anthropicByok },
-    });
-    if (!spend.ok) return NextResponse.json({ error: spend.error || '잔액 부족' }, { status: 402 });
+    let autoAnalyzeCreditsUsed = 0;
+    let autoAnalyzeByok = false;
 
     try {
-        const outline = await generateOutline({
-            title: product.title || undefined,
-            analysis,
-            userBrief,
-            userAnthropicKey: anthropicKey,
-        });
+        // Step 0: analysis 없으면 자동 분석 (withCreditRefund 로 감싸 spend+refund 자동)
+        if (!analysis) {
+            const imageUrl = product.outputImages[0]?.r2Url
+                || product.images[0]?.r2Url
+                || product.images[0]?.sourceUrl;
+            if (!imageUrl) {
+                return NextResponse.json({ error: '분석할 이미지가 없습니다' }, { status: 400 });
+            }
 
-        await prisma.product.update({
-            where: { id: product.id },
-            data: {
-                metadata: {
-                    ...(product.metadata as any),
-                    generatedPage: outline,
-                    generatedPageAt: new Date().toISOString(),
-                    generatedPageBrief: userBrief,
-                } as any,
+            const analyzeGuarded = await withCreditRefund(
+                userId,
+                {
+                    action: 'ANALYZE',
+                    baseCost: ANALYZE_COST,
+                    bot: 'pdpbot',
+                    refType: 'Product',
+                    refId: product.id,
+                    metadata: { auto: true, parentAction: 'generate-page' },
+                },
+                async ({ userKey }) => {
+                    const a = await analyzeProduct({
+                        imageUrl,
+                        title: product.title || undefined,
+                        sourceSite: product.source,
+                        sourceUrl: product.sourceUrl,
+                        userAnthropicKey: userKey,
+                    });
+                    await prisma.product.update({
+                        where: { id: product.id },
+                        data: {
+                            metadata: {
+                                ...(product.metadata as any),
+                                analysis: a,
+                                analyzedAt: new Date().toISOString(),
+                            } as any,
+                        },
+                    });
+                    return a;
+                },
+            );
+            analysis = analyzeGuarded.result;
+            autoAnalyzeCreditsUsed = analyzeGuarded.creditsUsed;
+            autoAnalyzeByok = analyzeGuarded.byok;
+        }
+
+        // Step 1: outline 생성
+        const outlineGuarded = await withCreditRefund(
+            userId,
+            {
+                action: 'OUTLINE',
+                baseCost: OUTLINE_COST,
+                bot: 'pdpbot',
+                refType: 'Product',
+                refId: product.id,
+                metadata: { kind: 'outline' },
             },
-        });
+            async ({ userKey }) => {
+                const outline = await generateOutline({
+                    title: product.title || undefined,
+                    analysis,
+                    userBrief,
+                    userAnthropicKey: userKey,
+                });
+                await prisma.product.update({
+                    where: { id: product.id },
+                    data: {
+                        metadata: {
+                            ...(product.metadata as any),
+                            generatedPage: outline,
+                            generatedPageAt: new Date().toISOString(),
+                            generatedPageBrief: userBrief,
+                        } as any,
+                    },
+                });
+                return outline;
+            },
+        );
 
         return NextResponse.json({
             ok: true,
-            outline,
-            analysis, // 자동 분석된 경우 같이 반환
-            creditsUsed: adjustedOutlineCost + totalAutoAnalyzeCost,
-            byok: anthropicByok,
-            balanceAfter: spend.balanceAfter,
+            outline: outlineGuarded.result,
+            analysis,
+            creditsUsed: outlineGuarded.creditsUsed + autoAnalyzeCreditsUsed,
+            byok: outlineGuarded.byok || autoAnalyzeByok,
+            balanceAfter: outlineGuarded.balanceAfter,
         });
     } catch (e: any) {
         console.error('[/api/products/generate-page] error', e);
-        const { addCredits } = await import('@/lib/credit');
-        if (adjustedOutlineCost > 0) {
-            await addCredits(userId, adjustedOutlineCost, 'pdpbot', 'REFUND', { reason: 'outline failed' }).catch(() => {});
-        }
-        return NextResponse.json({ error: e?.message || 'outline 생성 실패' }, { status: 500 });
+        return NextResponse.json(
+            { error: e?.message || 'outline 생성 실패' },
+            { status: e?.status === 402 ? 402 : 500 },
+        );
     }
 }

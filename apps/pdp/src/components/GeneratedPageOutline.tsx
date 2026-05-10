@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import {
     Card, Stack, Group, Text, Badge, Button, Box, Paper, ThemeIcon, Textarea, Divider, Image,
+    SimpleGrid,
 } from '@mantine/core';
 import {
     IconLayoutGrid, IconRefresh, IconSparkles, IconCopy, IconArrowDown, IconPhoto, IconCheck,
+    IconDeviceMobile,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import MobilePreview from './MobilePreview';
 
 interface PageSection {
     type: 'hero' | 'feature_list' | 'comparison' | 'usage' | 'social_proof' | 'cta';
@@ -302,13 +305,28 @@ export default function GeneratedPageOutline({
                             다운로드
                         </Button>
                     </Group>
-                    <Image
-                        src={composedPageUrl}
-                        radius="sm"
-                        fit="contain"
-                        mah={600}
-                        alt="합성된 상세페이지"
-                    />
+                    <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+                        <Box>
+                            <Group gap={4} mb="xs">
+                                <IconLayoutGrid size={14} />
+                                <Text size="xs" fw={700} c="dimmed" tt="uppercase">데스크톱 / 다운로드</Text>
+                            </Group>
+                            <Image
+                                src={composedPageUrl}
+                                radius="sm"
+                                fit="contain"
+                                mah={600}
+                                alt="합성된 상세페이지"
+                            />
+                        </Box>
+                        <Box>
+                            <Group gap={4} mb="xs">
+                                <IconDeviceMobile size={14} />
+                                <Text size="xs" fw={700} c="dimmed" tt="uppercase">모바일 미리보기</Text>
+                            </Group>
+                            <MobilePreview imageUrl={composedPageUrl} alt="모바일 미리보기" />
+                        </Box>
+                    </SimpleGrid>
                 </Paper>
             )}
 
