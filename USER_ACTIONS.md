@@ -33,6 +33,20 @@
 - [ ] **Step 8** Cloudflare → DNS → CNAME `pdpbot` → `cname.vercel-dns.com` (DNS only)
 - [ ] **Step 9** 운영 DB 본인 계정에 credits 충전 (5000+)
 
+### Phase 1.4 — Stripe 결제 (운영 시작 전, 총 ~20분)
+
+- [ ] **Stripe-1** https://dashboard.stripe.com/ 가입 → 비즈니스 정보 입력
+- [ ] **Stripe-2** **Account → API keys** → **Secret key** 복사 (sk_test_... 또는 sk_live_...)
+- [ ] **Stripe-3** **Developers → Webhooks → "+ Add endpoint"**:
+  - URL: `https://pdpbot.amakers.co.kr/api/webhook/stripe`
+  - Events: `checkout.session.completed` (1개)
+  - **Add endpoint** → **Signing secret** (`whsec_...`) 복사
+- [ ] **Stripe-4** Vercel pdpbot env vars:
+  - `STRIPE_SECRET_KEY` (Sensitive)
+  - `STRIPE_WEBHOOK_SECRET` (Sensitive)
+- [ ] **Stripe-5** Vercel 재배포 → /pricing 접속 → 100 credits 패키지 결제 테스트
+- [ ] **Stripe-6** Stripe Dashboard 에서 결제 + /dashboard/billing 에서 credits 충전 확인
+
 ---
 
 ## 🟩 마케팅봇 (병행 — 운영 중)
