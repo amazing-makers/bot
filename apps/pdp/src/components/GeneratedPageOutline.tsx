@@ -39,9 +39,12 @@ const TYPE_LABELS: Record<string, { label: string; color: string; emoji: string 
 export default function GeneratedPageOutline({
     productId,
     initial,
+    initialComposedPageUrl,
 }: {
     productId: string;
     initial?: Outline | null;
+    /** Phase 3.3 — 이미 합성한 1장 PNG URL (있으면 표시). */
+    initialComposedPageUrl?: string | null;
 }) {
     const [outline, setOutline] = useState<Outline | null>(initial || null);
     const [loading, setLoading] = useState(false);
@@ -49,6 +52,28 @@ export default function GeneratedPageOutline({
     const [brief, setBrief] = useState('');
     /** sectionIdx → loading 여부 (Phase 3.2 이미지 생성 진행 중인 섹션). */
     const [imageLoading, setImageLoading] = useState<Record<number, boolean>>({});
+    /** Phase 3.3 — 전체 페이지 합성 진행 + 결과 URL. */
+    const [composeLoading, setComposeLoading] = useState(false);
+    const [composedPageUrl, setComposedPageUrl] = useState<string | null>(initialComposedPageUrl || null);
+
+    const handleComposePage = async () => {
+        setComposeLoading(true);
+        try {
+            const r = await fetch(`/api/products/${productId}/compose-page`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error || '페이지 합성 실패');
+            setComposedPageUrl(data.r2Url);
+            notifications.show({
+                title: '✨ 상세페이지 1장 PNG 합성 완료',
+                message: `${data.creditsUsed} credit · ${data.width}×${data.height}px · 잔액 ${data.balanceAfter}`,
+                color: 'teal',
+            });
+        } catch (e: any) {
+            notifications.show({ title: '합성 실패', message: e?.message || '오류', color: 'red' });
+        } finally {
+            setComposeLoading(false);
+        }
+    };
 
     const handleGenerateImage = async (sectionIdx: number, imagePrompt?: string) => {
         setImageLoading(prev => ({ ...prev, [sectionIdx]: true }));
@@ -164,11 +189,22 @@ export default function GeneratedPageOutline({
                     <Badge variant="light">{outline.sections.length}개 섹션</Badge>
                     <Badge variant="dot" color="gray">톤: {outline.overallTone}</Badge>
                 </Group>
-                <Button onClick={handleGenerate} loading={loading} variant="subtle" size="xs"
-                    leftSection={<IconRefresh size={14} />}
-                >
-                    재생성 (5 credits)
-                </Button>
+                <Group gap="xs">
+                    <Button
+                        onClick={handleComposePage}
+                        loading={composeLoading}
+                        size="xs"
+                        color="teal"
+                        leftSection={<IconLayoutGrid size={14} />}
+                    >
+                        {composedPageUrl ? '전체 재합성' : '전체 1장 PNG 합성'} (1 credit)
+                    </Button>
+                    <Button onClick={handleGenerate} loading={loading} variant="subtle" size="xs"
+                        leftSection={<IconRefresh size={14} />}
+                    >
+                        재생성 (5 credits)
+                    </Button>
+                </Group>
             </Group>
 
             <Stack gap="md">
@@ -247,8 +283,37 @@ export default function GeneratedPageOutline({
                 })}
             </Stack>
 
+            {composedPageUrl && (
+                <Paper withBorder p="md" radius="md" mt="lg" bg="teal.0">
+                    <Group justify="space-between" mb="xs">
+                        <Group gap="xs">
+                            <ThemeIcon variant="light" color="teal" size="md"><IconCheck size={16} /></ThemeIcon>
+                            <Text fw={700} size="md">최종 상세페이지 1장 PNG</Text>
+                            <Badge variant="dot" color="teal">쿠팡·네이버 업로드 가능</Badge>
+                        </Group>
+                        <Button
+                            component="a"
+                            href={composedPageUrl}
+                            download="detail-page.png"
+                            target="_blank"
+                            size="xs"
+                            color="teal"
+                        >
+                            다운로드
+                        </Button>
+                    </Group>
+                    <Image
+                        src={composedPageUrl}
+                        radius="sm"
+                        fit="contain"
+                        mah={600}
+                        alt="합성된 상세페이지"
+                    />
+                </Paper>
+            )}
+
             <Text size="xs" c="dimmed" mt="md" ta="center">
-                ⓘ 섹션별 이미지 생성 (Phase 3.2) 완료 — 다음은 Phase 3.3 (전체 합성 1장 PNG).
+                ⓘ 섹션별 이미지 생성 후 '전체 1장 PNG 합성' 으로 한 장의 상세페이지 PNG 완성 — 쿠팡·네이버 등에 그대로 업로드 가능.
             </Text>
         </Card>
     );

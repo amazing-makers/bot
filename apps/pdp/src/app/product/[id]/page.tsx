@@ -129,11 +129,12 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                         />
                     </Box>
 
-                    {/* 신규 상세페이지 outline 자동 생성 (Phase 3.1) */}
+                    {/* 신규 상세페이지 outline 자동 생성 (Phase 3.1~3.3) */}
                     <Box mb="lg">
                         <GeneratedPageOutline
                             productId={product.id}
                             initial={(product.metadata as any)?.generatedPage || null}
+                            initialComposedPageUrl={(product.metadata as any)?.composedPageUrl || null}
                         />
                     </Box>
 
