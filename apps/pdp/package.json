@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3200",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:credits": "tsx scripts/seed-credits.ts"
   },
   "dependencies": {
     "@amakers/auth": "*",
@@ -44,6 +45,7 @@
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "16.2.4",
+    "tsx": "^4.19.0",
     "typescript": "^5.5.0"
   }
 }
