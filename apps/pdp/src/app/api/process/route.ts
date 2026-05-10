@@ -205,8 +205,11 @@ export async function POST(req: NextRequest) {
         if (!inpaintSpend.ok) throw new Error(inpaintSpend.error || '잔액 부족 (INPAINT)');
         creditsUsed += CREDIT_RATES.INPAINT;
 
-        // === Step 6: 인페인팅 결과 다운로드 + 텍스트 합성 ===
+        // === Step 6: 인페인팅 결과 다운로드 + R2 별도 저장 (재합성 위해) + 텍스트 합성 ===
         const inpaintedBuf = await fetchAsBuffer(inpaintedUrl);
+        const inpaintedKey = `pdp/${userId}/${product.id}/${taskId}/inpainted.png`;
+        const inpaintedR2Url = await uploadToR2(inpaintedKey, inpaintedBuf, 'image/png');
+
         const composeRegions: ComposeRegion[] = regions.map((r, i) => ({
             ...r,
             translatedText: finalTexts[i],
@@ -234,7 +237,17 @@ export async function POST(req: NextRequest) {
                 height: originH,
                 mode: 'inpaint_translate',
                 creditsUsed,
-                metadata: { taskId, regionCount: regions.length } as any,
+                // inpaintedR2Url 보존 — 재합성 시 인페인팅 skip 하고 합성만 (1 credit).
+                metadata: { taskId, regionCount: regions.length, inpaintedR2Url } as any,
+            },
+        });
+
+        // ScrapedImage 에도 inpaintedR2Url 저장 — 재합성 시 빠른 조회.
+        await prisma.scrapedImage.update({
+            where: { id: scrapedImage.id },
+            data: {
+                // ScrapedImage 에 metadata 컬럼 없으니 r2Url 옆에 별도 필드 추가는 schema 변경 필요.
+                // 일단 OutputImage.metadata.inpaintedR2Url 만 사용 — recompose endpoint 가 거기서 읽음.
             },
         });
 

@@ -9,6 +9,7 @@ import { IconWand, IconDownload, IconArrowLeft, IconExternalLink, IconCoin } fro
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import ProductAnalysis from '@/components/ProductAnalysis';
+import RecomposeForm from '@/components/RecomposeForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -176,16 +177,21 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                                         {img.textRegions.length > 0 && (
                                             <>
                                                 <Divider my="sm" />
-                                                <Text size="xs" fw={700} mb={4}>탐지·번역된 텍스트</Text>
-                                                <Stack gap={2}>
-                                                    {img.textRegions.map(t => (
-                                                        <Group key={t.id} gap={4} wrap="nowrap">
-                                                            <Badge size="xs" variant="light">{t.sourceLanguage || '?'}</Badge>
-                                                            <Text size="11px" c="dimmed" style={{ flex: 1 }} truncate>{t.originalText}</Text>
-                                                            <Text size="xs" fw={500}>→ {t.userOverride || t.translatedText}</Text>
-                                                        </Group>
-                                                    ))}
-                                                </Stack>
+                                                <RecomposeForm
+                                                    scrapedImageId={img.id}
+                                                    initialRegions={img.textRegions.map(t => ({
+                                                        id: t.id,
+                                                        bboxX: t.bboxX,
+                                                        bboxY: t.bboxY,
+                                                        bboxW: t.bboxW,
+                                                        bboxH: t.bboxH,
+                                                        originalText: t.originalText,
+                                                        sourceLanguage: t.sourceLanguage,
+                                                        translatedText: t.translatedText,
+                                                        userOverride: t.userOverride,
+                                                    }))}
+                                                    latestOutput={out ? { r2Url: out.r2Url } : undefined}
+                                                />
                                             </>
                                         )}
                                     </Card>
