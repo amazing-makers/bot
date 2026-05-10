@@ -26,6 +26,7 @@ import { prisma } from '@/lib/prisma';
 import { generateSectionImage } from '@/lib/pipeline/generate-section-image';
 import { uploadToR2, isR2Configured } from '@/lib/storage/r2';
 import { spendCredits, addCredits } from '@/lib/credit';
+import { resolveByokForAction, computeByokAdjustedCost } from '@/lib/byok-cost';
 import type { GeneratedPageOutline, PageSection, SectionType } from '@/lib/pipeline/generate-outline';
 
 export const maxDuration = 120;
@@ -71,14 +72,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         return NextResponse.json({ error: '이 섹션은 imagePrompt 가 없습니다 (텍스트 only 섹션)' }, { status: 400 });
     }
 
-    // credits 차감
+    // BYOK 체크 — Replicate 키 있으면 0 credits
+    const { byok, userKey } = await resolveByokForAction(userId, 'IMAGE_GEN');
+    const adjustedCost = computeByokAdjustedCost(SECTION_IMAGE_COST, byok);
+
+    // credits 차감 (BYOK 면 0)
     const spend = await spendCredits(userId, {
-        amount: SECTION_IMAGE_COST,
+        amount: adjustedCost,
         bot: 'pdpbot',
         action: 'IMAGE_GEN',
         refType: 'Product',
         refId: product.id,
-        metadata: { phase: '3.2', sectionIdx, sectionType: section.type },
+        metadata: { phase: '3.2', sectionIdx, sectionType: section.type, byok },
     });
     if (!spend.ok) {
         return NextResponse.json({ error: spend.error || '잔액 부족' }, { status: 402 });
@@ -88,6 +93,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         const { buffer, width, height, modelUsed } = await generateSectionImage({
             sectionType: section.type as SectionType,
             imagePrompt,
+            userReplicateKey: userKey,
         });
 
         // R2 업로드
@@ -139,17 +145,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             r2Url,
             width,
             height,
-            creditsUsed: SECTION_IMAGE_COST,
+            creditsUsed: adjustedCost,
+            byok,
             balanceAfter: spend.balanceAfter,
         });
     } catch (e: any) {
         console.error('[/api/products/generate-section-image] error', e);
         // 실패 시 환불
-        await addCredits(userId, SECTION_IMAGE_COST, 'pdpbot', 'REFUND', {
-            reason: 'generate-section-image failed',
-            sectionIdx,
-            error: e?.message,
-        }).catch(() => {});
+        if (adjustedCost > 0) {
+            await addCredits(userId, adjustedCost, 'pdpbot', 'REFUND', {
+                reason: 'generate-section-image failed',
+                sectionIdx,
+                error: e?.message,
+            }).catch(() => {});
+        }
         return NextResponse.json(
             { error: e?.message || '이미지 생성 실패 (credits 환불됨)' },
             { status: 500 },

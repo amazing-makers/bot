@@ -16,11 +16,17 @@
 - [ ] **Step 1-3** Replicate API 키 발급 + 카드 + $10 충전 → https://replicate.com/account/api-tokens
 - [ ] **Step 2** R2 bucket 5개 값 확인 (마케팅봇 .env.local 그대로 또는 새 bucket)
 - [ ] **Step 3** `c:\amakers-platform\apps\pdp\.env.local` 작성 (`.env.example` 참조)
+- [ ] **Step 3-1** BYOK 키 암호화 secret 생성 + .env.local 추가:
+  ```powershell
+  # PowerShell 에서 한 줄로 실행:
+  $bytes = New-Object byte[] 32; (New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes); ($bytes | %{$_.ToString("x2")}) -join ''
+  ```
+  결과 64자 hex 를 `API_KEY_ENCRYPTION_SECRET=` 뒤에 붙여넣기. 운영 배포 후 변경 X (변경 시 기존 사용자 BYOK 키 모두 무효화).
 - [ ] **Step 4** PowerShell:
   ```powershell
   cd c:\amakers-platform\apps\pdp
   npx prisma generate
-  npx prisma migrate dev --name pdp_initial
+  npx prisma db push          # UserApiKey 테이블 등 schema 동기화
   ```
 - [ ] **Step 5** credits 충전: `npm run seed:credits -- 1000`
 - [ ] **Step 6** `npm run dev` → http://localhost:3200 → 이미지 1장 처리 테스트
@@ -29,7 +35,7 @@
 
 ### Phase 1.3 — 운영 배포 (총 ~15분)
 
-- [ ] **Step 7** Vercel → New Project → amazing-makers/bot → Root: `apps/pdp` → 환경변수 등록 → Deploy
+- [ ] **Step 7** Vercel → New Project → amazing-makers/bot → Root: `apps/pdp` → 환경변수 등록 (**`API_KEY_ENCRYPTION_SECRET` 포함**) → Deploy
 - [ ] **Step 8** Cloudflare → DNS → CNAME `pdpbot` → `cname.vercel-dns.com` (DNS only)
 - [ ] **Step 9** 운영 DB 본인 계정에 credits 충전 (5000+)
 

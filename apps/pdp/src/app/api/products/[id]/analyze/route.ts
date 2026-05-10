@@ -16,6 +16,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { analyzeProduct } from '@/lib/pipeline/analyze';
 import { spendCredits, CREDIT_RATES } from '@/lib/credit';
+import { resolveByokForAction, computeByokAdjustedCost } from '@/lib/byok-cost';
 
 export const maxDuration = 60;
 
@@ -44,13 +45,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         return NextResponse.json({ error: '분석할 이미지가 없습니다 — 먼저 이미지 추출 + 처리하세요' }, { status: 400 });
     }
 
-    // credits 차감
+    // BYOK 체크 — 사용자가 Anthropic 키 입력했으면 운영자 키 대신 사용 + credit 0
+    const { byok, userKey } = await resolveByokForAction(userId, 'ANALYZE');
+    const adjustedCost = computeByokAdjustedCost(ANALYZE_COST, byok);
+
+    // credits 차감 (BYOK 면 0)
     const spend = await spendCredits(userId, {
-        amount: ANALYZE_COST,
+        amount: adjustedCost,
         bot: 'pdpbot',
         action: 'IMAGE_GEN', // 'ANALYZE' action 추가는 schema 변경 필요 — 일단 IMAGE_GEN 재사용
         refType: 'Product',
         refId: product.id,
+        metadata: { byok, kind: 'ANALYZE' },
     });
     if (!spend.ok) {
         return NextResponse.json({ error: spend.error || '잔액 부족' }, { status: 402 });
@@ -62,6 +68,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             title: product.title || undefined,
             sourceSite: product.source,
             sourceUrl: product.sourceUrl,
+            userAnthropicKey: userKey,
         });
 
         // Product.metadata 에 저장 (덮어씀 — 항상 최신만 유지)
@@ -80,17 +87,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         return NextResponse.json({
             ok: true,
             analysis,
-            creditsUsed: ANALYZE_COST,
+            creditsUsed: adjustedCost,
+            byok,
             balanceAfter: spend.balanceAfter,
         });
     } catch (e: any) {
         console.error('[/api/products/analyze] error', e);
         // 실패 시 credit 환불 (Claude API fail 시 셀러 보호)
         const { addCredits } = await import('@/lib/credit');
-        await addCredits(userId, ANALYZE_COST, 'pdpbot', 'REFUND', {
-            reason: 'analyze failed',
-            error: e?.message,
-        }).catch(() => {});
+        if (adjustedCost > 0) {
+            await addCredits(userId, adjustedCost, 'pdpbot', 'REFUND', {
+                reason: 'analyze failed',
+                error: e?.message,
+            }).catch(() => {});
+        }
 
         return NextResponse.json(
             { error: e?.message || '분석 실패 (credits 환불됨)' },

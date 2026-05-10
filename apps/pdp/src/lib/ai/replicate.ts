@@ -10,14 +10,20 @@
 
 import Replicate from 'replicate';
 
-let client: Replicate | null = null;
+let operatorClient: Replicate | null = null;
 
-export function getReplicate(): Replicate {
-    if (client) return client;
+/**
+ * @param userKey BYOK 모드 — 사용자가 입력한 Replicate API token. 넘기면 운영자 키 대신 사용.
+ */
+export function getReplicate(userKey?: string | null): Replicate {
+    if (userKey) {
+        return new Replicate({ auth: userKey });
+    }
+    if (operatorClient) return operatorClient;
     const auth = process.env.REPLICATE_API_TOKEN;
     if (!auth) throw new Error('REPLICATE_API_TOKEN 환경변수가 없습니다');
-    client = new Replicate({ auth });
-    return client;
+    operatorClient = new Replicate({ auth });
+    return operatorClient;
 }
 
 // 모델 ID — Replicate 의 최신 모델. version 은 Replicate 페이지에서 확인.

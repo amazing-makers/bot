@@ -2,19 +2,26 @@
  * Anthropic Claude client wrapper.
  *
  * 주 사용 — 번역 (Claude Opus 4.7), 카피라이팅 (Phase 2-3), 상품 분석.
- * Vision 도 지원 (대안 OCR) 하지만 OCR 정확도는 GPT-4 Vision 이 약간 더 좋아 OpenAI 우선.
+ *
+ * BYOK 지원: getAnthropic(userKey) 로 사용자 키 명시 시 → 새 client (캐시 X). 없으면 운영자 키 (캐시 O).
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 
-let client: Anthropic | null = null;
+let operatorClient: Anthropic | null = null;
 
-export function getAnthropic(): Anthropic {
-    if (client) return client;
+/**
+ * @param userKey BYOK 모드 — 사용자가 입력한 Anthropic 키. 넘기면 운영자 키 대신 사용.
+ */
+export function getAnthropic(userKey?: string | null): Anthropic {
+    if (userKey) {
+        return new Anthropic({ apiKey: userKey });
+    }
+    if (operatorClient) return operatorClient;
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY 환경변수가 없습니다');
-    client = new Anthropic({ apiKey });
-    return client;
+    operatorClient = new Anthropic({ apiKey });
+    return operatorClient;
 }
 
 // 모델 ID 는 Anthropic 의 최신 안정 버전. 새 모델 출시 시 한 곳만 변경.

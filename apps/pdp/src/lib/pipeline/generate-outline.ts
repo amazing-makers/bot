@@ -71,8 +71,10 @@ export async function generateOutline(opts: {
     analysis: ProductAnalysis;
     /** 사용자 추가 요청 — '브랜드 톤이 더 고급스럽게' 등. */
     userBrief?: string;
+    /** BYOK — 사용자 Anthropic 키. */
+    userAnthropicKey?: string | null;
 }): Promise<GeneratedPageOutline> {
-    const anthropic = getAnthropic();
+    const anthropic = getAnthropic(opts.userAnthropicKey);
     const userPrompt = [
         `상품 정보:`,
         `- 제목: ${opts.title || '(없음)'}`,

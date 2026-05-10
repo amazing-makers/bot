@@ -42,9 +42,14 @@ const SYSTEM_PROMPT = `너는 이미지 안의 텍스트를 정확히 탐지해 
 /**
  * 이미지 URL → 텍스트 영역 list 추출.
  * imageUrl 은 public 접근 가능해야 (R2 또는 외부 사이트 직접 URL).
+ *
+ * @param userOpenAIKey BYOK — 사용자 OpenAI 키 (있으면 운영자 키 대신 사용).
  */
-export async function detectTextRegions(imageUrl: string): Promise<DetectedRegion[]> {
-    const openai = getOpenAI();
+export async function detectTextRegions(
+    imageUrl: string,
+    userOpenAIKey?: string | null,
+): Promise<DetectedRegion[]> {
+    const openai = getOpenAI(userOpenAIKey);
     const res = await openai.chat.completions.create({
         model: OPENAI_VISION_MODEL,
         messages: [

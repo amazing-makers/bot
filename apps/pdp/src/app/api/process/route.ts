@@ -39,6 +39,7 @@ import { translateRegionsBatch } from '@/lib/pipeline/translate';
 import { composeWithTranslations, type ComposeRegion } from '@/lib/pipeline/compose';
 import { uploadToR2, fetchAsBuffer, isR2Configured } from '@/lib/storage/r2';
 import { spendCredits, CREDIT_RATES } from '@/lib/credit';
+import { resolveByokForAction, computeByokAdjustedCost } from '@/lib/byok-cost';
 
 export const maxDuration = 300; // 5분 (FLUX inpainting 이 오래 걸릴 수 있음)
 
@@ -93,8 +94,15 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // 잔액 사전 체크 (실제 차감은 단계 성공 시마다)
-    const totalEstimated = CREDIT_RATES.OCR + CREDIT_RATES.INPAINT + CREDIT_RATES.TRANSLATE + CREDIT_RATES.COMPOSE;
+    // BYOK 체크 — 3개 프로바이더 한 번에 조회
+    const ocrByokInfo = await resolveByokForAction(userId, 'OCR');
+    const translateByokInfo = await resolveByokForAction(userId, 'TRANSLATE');
+    const inpaintByokInfo = await resolveByokForAction(userId, 'INPAINT');
+
+    const ocrCost = computeByokAdjustedCost(CREDIT_RATES.OCR, ocrByokInfo.byok);
+    const translateCost = computeByokAdjustedCost(CREDIT_RATES.TRANSLATE, translateByokInfo.byok);
+    const inpaintCost = computeByokAdjustedCost(CREDIT_RATES.INPAINT, inpaintByokInfo.byok);
+    const composeCost = CREDIT_RATES.COMPOSE; // Sharp local — BYOK 영향 X
 
     let creditsUsed = 0;
     const taskId = randomUUID();
@@ -123,15 +131,15 @@ export async function POST(req: NextRequest) {
         });
 
         // === Step 2: GPT-4 Vision OCR ===
-        const regions = await detectTextRegions(originalR2Url);
+        const regions = await detectTextRegions(originalR2Url, ocrByokInfo.userKey);
         const ocrSpend = await spendCredits(userId, {
-            amount: CREDIT_RATES.OCR,
+            amount: ocrCost,
             bot: 'pdpbot',
             action: 'OCR',
-            metadata: { taskId, regionCount: regions.length },
+            metadata: { taskId, regionCount: regions.length, byok: ocrByokInfo.byok },
         });
         if (!ocrSpend.ok) throw new Error(ocrSpend.error || '잔액 부족 (OCR)');
-        creditsUsed += CREDIT_RATES.OCR;
+        creditsUsed += ocrCost;
 
         if (regions.length === 0) {
             // 텍스트 없는 이미지 — 인페인팅 skip, 원본 그대로 결과 + DB 에 OutputImage 동일하게 저장
@@ -158,15 +166,15 @@ export async function POST(req: NextRequest) {
         }
 
         // === Step 3: Claude 일괄 번역 ===
-        const translations = await translateRegionsBatch(regions);
+        const translations = await translateRegionsBatch(regions, translateByokInfo.userKey);
         const translateSpend = await spendCredits(userId, {
-            amount: CREDIT_RATES.TRANSLATE,
+            amount: translateCost,
             bot: 'pdpbot',
             action: 'TRANSLATE',
-            metadata: { taskId, regionCount: regions.length },
+            metadata: { taskId, regionCount: regions.length, byok: translateByokInfo.byok },
         });
         if (!translateSpend.ok) throw new Error(translateSpend.error || '잔액 부족 (TRANSLATE)');
-        creditsUsed += CREDIT_RATES.TRANSLATE;
+        creditsUsed += translateCost;
 
         // 사용자 직접 입력 오버라이드 적용
         const finalTexts = translations.map((t, i) => userOverrides[i] || t);
@@ -195,15 +203,16 @@ export async function POST(req: NextRequest) {
         const inpaintedUrl = await runInpaint({
             imageUrl: originalR2Url,
             maskUrl: maskR2Url,
+            userReplicateKey: inpaintByokInfo.userKey,
         });
         const inpaintSpend = await spendCredits(userId, {
-            amount: CREDIT_RATES.INPAINT,
+            amount: inpaintCost,
             bot: 'pdpbot',
             action: 'INPAINT',
-            metadata: { taskId },
+            metadata: { taskId, byok: inpaintByokInfo.byok },
         });
         if (!inpaintSpend.ok) throw new Error(inpaintSpend.error || '잔액 부족 (INPAINT)');
-        creditsUsed += CREDIT_RATES.INPAINT;
+        creditsUsed += inpaintCost;
 
         // === Step 6: 인페인팅 결과 다운로드 + R2 별도 저장 (재합성 위해) + 텍스트 합성 ===
         const inpaintedBuf = await fetchAsBuffer(inpaintedUrl);
@@ -217,13 +226,13 @@ export async function POST(req: NextRequest) {
         const finalBuf = await composeWithTranslations(inpaintedBuf, composeRegions);
 
         const composeSpend = await spendCredits(userId, {
-            amount: CREDIT_RATES.COMPOSE,
+            amount: composeCost,
             bot: 'pdpbot',
             action: 'COMPOSE',
             metadata: { taskId },
         });
         if (!composeSpend.ok) throw new Error(composeSpend.error || '잔액 부족 (COMPOSE)');
-        creditsUsed += CREDIT_RATES.COMPOSE;
+        creditsUsed += composeCost;
 
         // === Step 7: 결과 R2 업로드 + OutputImage DB 저장 ===
         const outputKey = `pdp/${userId}/${product.id}/${taskId}/output.png`;

@@ -30,6 +30,12 @@
 **Phase 3 풀 비용 (8개 섹션 기준):** 5 + 8×20 + 1 = 166 credits ≈ ₩16,600
 **Phase 1 + Phase 3 풀 비용:** 약 207 credits ≈ ₩20,700
 
+**BYOK 모드 (사용자 직접 키 입력):**
+- `/dashboard/api-keys` → OpenAI/Anthropic/Replicate 키 입력 → 해당 호출 credit 0
+- 캐주얼 유저 = 운영자 키 + Credit (간편)
+- 헤비 유저 = BYOK (월 1000+ 상품 시 ~50% 비용 절감)
+- 키는 AES-256-GCM 암호화 (`API_KEY_ENCRYPTION_SECRET` env 필요)
+
 **다음 후보:**
 - Phase 4: 채널 자동 업로드 (쿠팡 Wing API, 네이버 Smartstore API)
 - Phase 2.2: 키워드 검색량 분석 (네이버 DataLab API)

@@ -46,8 +46,10 @@ export async function generateSectionImage(opts: {
     imagePrompt: string;
     /** 강화 prompt — 한국 모바일 상세페이지 스타일로 일관된 톤. */
     extraPromptSuffix?: string;
+    /** BYOK — 사용자 Replicate token. */
+    userReplicateKey?: string | null;
 }): Promise<{ buffer: Buffer; width: number; height: number; modelUsed: string }> {
-    const replicate = getReplicate();
+    const replicate = getReplicate(opts.userReplicateKey);
     const size = SECTION_SIZES[opts.sectionType] || SECTION_SIZES.feature_list;
 
     // 한국 e-commerce 상세페이지 톤 — 깨끗한 배경, 자연광, 텍스트 없는 이미지 (텍스트는 합성 단계 Phase 3.3 에서 추가).

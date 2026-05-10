@@ -6,7 +6,7 @@ import {
     AppShell, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box,
     Image, Anchor, Paper,
 } from '@mantine/core';
-import { IconWand, IconPlus, IconCoin, IconClock, IconCheck, IconExternalLink } from '@tabler/icons-react';
+import { IconWand, IconPlus, IconCoin, IconClock, IconCheck, IconExternalLink, IconKey } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 
@@ -60,6 +60,9 @@ export default async function DashboardPage() {
                             </Anchor>
                             <Button component={Link} href="/pricing" size="xs" variant="light" color="violet">
                                 충전
+                            </Button>
+                            <Button component={Link} href="/dashboard/api-keys" size="xs" variant="subtle" color="teal" leftSection={<IconKey size={14} />}>
+                                BYOK
                             </Button>
                             <Text size="sm" c="dimmed">{session?.user?.email}</Text>
                         </Group>

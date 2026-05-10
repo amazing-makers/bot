@@ -15,8 +15,12 @@ const SYSTEM_PROMPT = `너는 해외 상품을 한국 시장에 판매하는 셀
 4) 글자 수: 원문보다 1.2배 이내 (디자인 공간 고려).
 5) 출력은 번역된 한국어 텍스트만 (설명·인용 부호·메타 X).`;
 
-export async function translateToKorean(originalText: string, sourceLanguage?: string): Promise<string> {
-    const anthropic = getAnthropic();
+export async function translateToKorean(
+    originalText: string,
+    sourceLanguage?: string,
+    userAnthropicKey?: string | null,
+): Promise<string> {
+    const anthropic = getAnthropic(userAnthropicKey);
     const userPrompt = `원문 (${sourceLanguage || '자동감지'}):
 ${originalText}
 
@@ -45,10 +49,11 @@ ${originalText}
  */
 export async function translateRegionsBatch(
     regions: Array<{ originalText: string; sourceLanguage?: string }>,
+    userAnthropicKey?: string | null,
 ): Promise<string[]> {
     if (regions.length === 0) return [];
 
-    const anthropic = getAnthropic();
+    const anthropic = getAnthropic(userAnthropicKey);
     const numbered = regions.map((r, i) => `[${i + 1}] (${r.sourceLanguage || '?'}) ${r.originalText}`).join('\n');
 
     const userPrompt = `다음은 한 상품 상세페이지 이미지에서 추출된 텍스트 영역들이다. 각각 자연스러운 한국어로 번역해줘.

@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma';
 import { generateOutline } from '@/lib/pipeline/generate-outline';
 import { analyzeProduct } from '@/lib/pipeline/analyze';
 import { spendCredits, CREDIT_RATES } from '@/lib/credit';
+import { resolveByokForAction, computeByokAdjustedCost } from '@/lib/byok-cost';
 
 export const maxDuration = 90;
 
@@ -48,6 +49,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     let analysis = (product.metadata as any)?.analysis;
 
+    // BYOK 체크 — analyze 와 outline 둘 다 anthropic 사용. 한 번만 조회.
+    const { byok: anthropicByok, userKey: anthropicKey } = await resolveByokForAction(userId, 'ANALYZE');
+    const adjustedAnalyzeCost = computeByokAdjustedCost(ANALYZE_COST, anthropicByok);
+    const adjustedOutlineCost = computeByokAdjustedCost(OUTLINE_COST, anthropicByok);
+    let totalAutoAnalyzeCost = 0;
+
     // Step 0: analysis 없으면 먼저 자동 분석
     if (!analysis) {
         const imageUrl = product.outputImages[0]?.r2Url
@@ -58,12 +65,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         }
 
         const spend = await spendCredits(userId, {
-            amount: ANALYZE_COST,
+            amount: adjustedAnalyzeCost,
             bot: 'pdpbot',
             action: 'IMAGE_GEN',
             refType: 'Product',
             refId: product.id,
-            metadata: { auto: true, parentAction: 'generate-page' },
+            metadata: { auto: true, parentAction: 'generate-page', byok: anthropicByok },
         });
         if (!spend.ok) return NextResponse.json({ error: spend.error || '잔액 부족 (analyze)' }, { status: 402 });
 
@@ -73,6 +80,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
                 title: product.title || undefined,
                 sourceSite: product.source,
                 sourceUrl: product.sourceUrl,
+                userAnthropicKey: anthropicKey,
             });
             await prisma.product.update({
                 where: { id: product.id },
@@ -84,21 +92,24 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
                     } as any,
                 },
             });
+            totalAutoAnalyzeCost = adjustedAnalyzeCost;
         } catch (e: any) {
             const { addCredits } = await import('@/lib/credit');
-            await addCredits(userId, ANALYZE_COST, 'pdpbot', 'REFUND', { reason: 'auto-analyze failed' }).catch(() => {});
+            if (adjustedAnalyzeCost > 0) {
+                await addCredits(userId, adjustedAnalyzeCost, 'pdpbot', 'REFUND', { reason: 'auto-analyze failed' }).catch(() => {});
+            }
             return NextResponse.json({ error: 'analyze 실패: ' + (e?.message || '') }, { status: 500 });
         }
     }
 
     // Step 1: outline 생성
     const spend = await spendCredits(userId, {
-        amount: OUTLINE_COST,
+        amount: adjustedOutlineCost,
         bot: 'pdpbot',
         action: 'TRANSLATE', // text-only Claude → TRANSLATE 단가 재사용
         refType: 'Product',
         refId: product.id,
-        metadata: { kind: 'outline' },
+        metadata: { kind: 'outline', byok: anthropicByok },
     });
     if (!spend.ok) return NextResponse.json({ error: spend.error || '잔액 부족' }, { status: 402 });
 
@@ -107,6 +118,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             title: product.title || undefined,
             analysis,
             userBrief,
+            userAnthropicKey: anthropicKey,
         });
 
         await prisma.product.update({
@@ -125,13 +137,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             ok: true,
             outline,
             analysis, // 자동 분석된 경우 같이 반환
-            creditsUsed: OUTLINE_COST,
+            creditsUsed: adjustedOutlineCost + totalAutoAnalyzeCost,
+            byok: anthropicByok,
             balanceAfter: spend.balanceAfter,
         });
     } catch (e: any) {
         console.error('[/api/products/generate-page] error', e);
         const { addCredits } = await import('@/lib/credit');
-        await addCredits(userId, OUTLINE_COST, 'pdpbot', 'REFUND', { reason: 'outline failed' }).catch(() => {});
+        if (adjustedOutlineCost > 0) {
+            await addCredits(userId, adjustedOutlineCost, 'pdpbot', 'REFUND', { reason: 'outline failed' }).catch(() => {});
+        }
         return NextResponse.json({ error: e?.message || 'outline 생성 실패' }, { status: 500 });
     }
 }

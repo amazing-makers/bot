@@ -60,8 +60,10 @@ export async function runInpaint(opts: {
     maskUrl: string;
     /** 인페인팅 prompt — 'remove text, restore background' 같은 지시. */
     prompt?: string;
+    /** BYOK — 사용자 Replicate token. */
+    userReplicateKey?: string | null;
 }): Promise<string> {
-    const replicate = getReplicate();
+    const replicate = getReplicate(opts.userReplicateKey);
     const prompt = opts.prompt
         || 'Remove all text and restore the original background seamlessly. Match surrounding colors, textures, lighting and style. No text should remain.';
 

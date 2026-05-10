@@ -62,8 +62,10 @@ export async function analyzeProduct(opts: {
     title?: string;
     sourceSite?: string;       // 'coupang' | 'taobao' 등
     sourceUrl?: string;
+    /** BYOK — 사용자 Anthropic 키. */
+    userAnthropicKey?: string | null;
 }): Promise<ProductAnalysis> {
-    const anthropic = getAnthropic();
+    const anthropic = getAnthropic(opts.userAnthropicKey);
 
     // Claude image input 은 base64 또는 URL — URL 직접 지원.
     const userContent: any[] = [
