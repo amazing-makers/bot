@@ -114,11 +114,28 @@ function absoluteUrl(maybeRelative: string, base: string): string {
 
 /**
  * 메인 dispatcher. URL 을 받아 적절한 scraper 호출.
- * Phase 1 은 generic 만 사용 — Phase 1.1 에서 site-specific 추가 예정.
+ *   - 사이트별 specialized scraper (coupang/taobao/1688)
+ *   - 그 외: generic (og:image + img 태그)
+ *
+ * specialized scraper 가 fail 하면 generic 으로 자동 fallback.
  */
 export async function scrapeProductPage(url: string): Promise<ScrapeResult> {
     const source = detectSource(url);
-    // TODO Phase 1.1: 사이트별 specialized scraper (coupang.ts, taobao.ts 등)
-    // 지금은 모든 사이트에 generic 사용 — og:image + img 태그.
+    try {
+        if (source === 'coupang') {
+            const { scrapeCoupang } = await import('./coupang');
+            return await scrapeCoupang(url);
+        }
+        if (source === 'taobao') {
+            const { scrapeTaobao } = await import('./taobao');
+            return await scrapeTaobao(url);
+        }
+        if (source === '1688') {
+            const { scrape1688 } = await import('./1688');
+            return await scrape1688(url);
+        }
+    } catch (e) {
+        console.warn('[scrapeProductPage] specialized scraper failed, falling back to generic', e);
+    }
     return scrapeGeneric(url);
 }

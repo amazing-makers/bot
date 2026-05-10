@@ -53,9 +53,14 @@ export default async function DashboardPage() {
                             </Anchor>
                         </Group>
                         <Group gap="md">
-                            <Badge variant="light" color="violet" size="lg" leftSection={<IconCoin size={14} />}>
-                                {balance.toLocaleString()} credits
-                            </Badge>
+                            <Anchor component={Link} href="/dashboard/billing" underline="never">
+                                <Badge variant="light" color="violet" size="lg" leftSection={<IconCoin size={14} />}>
+                                    {balance.toLocaleString()} credits
+                                </Badge>
+                            </Anchor>
+                            <Button component={Link} href="/pricing" size="xs" variant="light" color="violet">
+                                충전
+                            </Button>
                             <Text size="sm" c="dimmed">{session?.user?.email}</Text>
                         </Group>
                     </Group>
