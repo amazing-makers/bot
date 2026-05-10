@@ -14,6 +14,7 @@
 
 import sharp from 'sharp';
 import type { DetectedRegion } from './ocr';
+import { getKoreanFontStyle, KOREAN_FONT_FAMILY } from './fonts';
 
 export interface ComposeRegion extends DetectedRegion {
     /** 번역된 한국어 또는 사용자 직접 입력 */
@@ -31,6 +32,7 @@ export async function composeWithTranslations(
     const meta = await img.metadata();
     const w = meta.width || 800;
     const h = meta.height || 800;
+    const fontStyle = await getKoreanFontStyle();
 
     // SVG 로 모든 텍스트를 한 번에 그리기 (Sharp.composite 효율 ↑)
     const textElements = regions
@@ -49,12 +51,12 @@ export async function composeWithTranslations(
             const startY = y + fontSize + 2;
             return lines.map((line, lineIdx) => {
                 const ty = startY + lineIdx * lineHeight;
-                return `<text x="${x + 4}" y="${ty}" font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif" font-size="${fontSize}" font-weight="700" fill="#222">${line}</text>`;
+                return `<text x="${x + 4}" y="${ty}" font-family="${KOREAN_FONT_FAMILY}" font-size="${fontSize}" font-weight="700" fill="#222">${line}</text>`;
             }).join('\n');
         })
         .join('\n');
 
-    const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">${textElements}</svg>`;
+    const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">${fontStyle}${textElements}</svg>`;
 
     return img.composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toBuffer();
 }

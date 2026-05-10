@@ -8,6 +8,11 @@ const config: NextConfig = {
         '@amakers/types',
         '@amakers/ui',
     ],
+    // 한글 합성용 Pretendard .otf 파일을 Vercel serverless 번들에 포함.
+    // (lib/pipeline/fonts.ts 가 process.cwd()/fonts/ 경로로 readFile.)
+    outputFileTracingIncludes: {
+        '/api/**': ['./fonts/**'],
+    },
     typescript: {
         ignoreBuildErrors: false,
     },

@@ -24,6 +24,7 @@
 import sharp from 'sharp';
 import { fetchAsBuffer } from '../storage/r2';
 import type { GeneratedPageOutline, PageSection } from './generate-outline';
+import { getKoreanFontStyle, KOREAN_FONT_FAMILY } from './fonts';
 
 const PAGE_WIDTH = 1080;
 const PADDING_X = 48;
@@ -31,7 +32,7 @@ const SECTION_GAP = 32;
 const HEADLINE_FONT_SIZE = 44;
 const BODY_FONT_SIZE = 28;
 const CTA_FONT_SIZE = 32;
-const FONT_FAMILY = "Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif";
+const FONT_FAMILY = KOREAN_FONT_FAMILY;
 
 interface SectionWithImage extends PageSection {
     generatedImageUrl?: string;
@@ -51,6 +52,7 @@ interface RenderedSection {
  */
 async function renderSectionText(section: PageSection): Promise<{ buffer: Buffer; height: number }> {
     const innerWidth = PAGE_WIDTH - PADDING_X * 2;
+    const fontStyle = await getKoreanFontStyle();
 
     const headlineLines = wrapText(section.headline || '', innerWidth, HEADLINE_FONT_SIZE);
     const bodyLines = wrapText(section.body || '', innerWidth, BODY_FONT_SIZE);
@@ -105,6 +107,7 @@ async function renderSectionText(section: PageSection): Promise<{ buffer: Buffer
     }
 
     const svg = `<svg width="${PAGE_WIDTH}" height="${Math.ceil(totalHeight)}" xmlns="http://www.w3.org/2000/svg">
+        ${fontStyle}
         <rect width="${PAGE_WIDTH}" height="${Math.ceil(totalHeight)}" fill="#ffffff" />
         ${headlineSvg}
         ${bodySvg}
