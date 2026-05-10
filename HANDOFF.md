@@ -1,6 +1,6 @@
 # amakers-platform 진행 기록 (Session Handoff)
 
-**최종 갱신:** 2026-05-10
+**최종 갱신:** 2026-05-07
 **다음 세션 진입 시 이 파일 먼저 읽기.**
 
 ---
@@ -11,9 +11,29 @@
 |---|---|---|
 | 어드민봇 | ✅ 운영 | (안정 운영) |
 | 마케팅봇 | ✅ 운영 (별도 레포) | Phase 50 backlog 정리, MIGRATION 완료 후 합류 |
-| **pdpbot** | 🆕 Phase 1.1 scaffold ✅ | **Phase 1.2 핵심 기능 (현재 작업 중)** |
+| **pdpbot** | ✅ **Phase 1~3 완료** | **Phase 4 채널 자동 업로드 (쿠팡/네이버) 또는 사용자 베타 테스트** |
 | 디자인봇 | 📝 README only | pdpbot 완성 후 |
 | 모형봇 | 📝 미시작 | 후 |
+
+## pdpbot 진행 현황
+
+**완료 기능 (커밋 `e873a45` 기준):**
+- ✅ Phase 1: URL 입력 → 스크래핑 → OCR → 인페인팅 → 번역 → 합성 → R2 저장 (~41 credits)
+- ✅ Phase 1.5: 텍스트 사용자 수정 후 재합성 (1 credit, 인페인팅 재사용)
+- ✅ Phase 2.1: AI 상품 자동 분석 (10 credits, Claude Opus Vision)
+- ✅ **Phase 3.1**: 신규 상세페이지 outline 자동 생성 (5 credits, Claude Opus)
+- ✅ **Phase 3.2**: 섹션별 이미지 자동 생성 (20 credits/섹션, FLUX 1.1 Pro)
+- ✅ **Phase 3.3**: 섹션 합성 1장 PNG (1 credit, Sharp) — 쿠팡·네이버 직접 업로드 가능
+- ✅ Stripe 결제 + Credit billing 대시보드
+- ✅ Site-specific scrapers (Coupang, Taobao, 1688, Generic OG)
+
+**Phase 3 풀 비용 (8개 섹션 기준):** 5 + 8×20 + 1 = 166 credits ≈ ₩16,600
+**Phase 1 + Phase 3 풀 비용:** 약 207 credits ≈ ₩20,700
+
+**다음 후보:**
+- Phase 4: 채널 자동 업로드 (쿠팡 Wing API, 네이버 Smartstore API)
+- Phase 2.2: 키워드 검색량 분석 (네이버 DataLab API)
+- 사용자 베타 테스트 + 피드백 반영
 
 ## pdpbot 우선 작업
 
@@ -65,4 +85,7 @@
 
 1. 이 파일 읽기 (현재 상황 파악)
 2. [apps/pdp/STATUS.md](./apps/pdp/STATUS.md) 읽기 (pdp 작업 중인 부분)
-3. 멈춰있던 todo 부터 이어가기 — 현재: **Phase 1.2 핵심 기능 (OCR + 인페인팅 + 번역 + 합성 + UI)**
+3. 다음 후보:
+   - **Phase 4** 채널 자동 업로드 — 쿠팡 Wing API + 네이버 Smartstore API 연동
+   - **Phase 2.2** 키워드 검색량 (네이버 DataLab) — Phase 2.1 분석에 검색량 데이터 추가
+   - **사용자 베타 피드백 반영** — 사용자가 setup 완료 후 직접 테스트한 결과에 따라 우선순위 조정
