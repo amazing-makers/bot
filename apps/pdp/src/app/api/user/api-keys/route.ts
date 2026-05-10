@@ -19,6 +19,7 @@ import {
     ALL_PROVIDERS,
     type Provider,
 } from '@/lib/api-keys';
+import { validateApiKey } from '@/lib/api-key-validation';
 
 function isValidProvider(p: any): p is Provider {
     return (ALL_PROVIDERS as string[]).includes(p);
@@ -58,6 +59,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'key 가 너무 짧음 (10자 이상)' }, { status: 400 });
     }
 
+    // 저장 전 실제 프로바이더 호출 — 잘못된 키 미리 거르기 (잘못된 키 저장 → 사용 시 fail UX 안 좋음)
+    const validation = await validateApiKey(provider, key.trim());
+    if (!validation.ok) {
+        return NextResponse.json(
+            { error: validation.error || '키 검증 실패' },
+            { status: 400 },
+        );
+    }
+
     try {
         const result = await saveUserApiKey(userId, provider, key.trim());
         return NextResponse.json({
@@ -65,6 +75,7 @@ export async function POST(req: NextRequest) {
             provider,
             id: result.id,
             maskedHint: result.maskedHint,
+            accountInfo: validation.accountInfo,
         });
     } catch (e: any) {
         return NextResponse.json({ error: e?.message || '저장 실패' }, { status: 500 });

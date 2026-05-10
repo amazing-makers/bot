@@ -15,6 +15,7 @@
 
 import sharp from 'sharp';
 import { getReplicate, FLUX_FILL_MODEL } from '../ai/replicate';
+import { replicateOutputToBuffer } from '../ai/replicate-output';
 import type { DetectedRegion } from './ocr';
 
 /**
@@ -53,7 +54,7 @@ export async function buildMaskPng(
  * Replicate FLUX 1.1 Pro Fill 로 인페인팅 실행.
  * 입력: imageUrl + maskUrl (둘 다 public URL — R2 등에 미리 업로드 후 호출).
  *
- * @returns 인페인팅된 이미지 URL (Replicate 임시 URL — 24시간 후 만료, 즉시 R2 에 다운로드 권장)
+ * @returns 인페인팅된 이미지 PNG buffer (Replicate URL/stream/FileOutput 모두 처리).
  */
 export async function runInpaint(opts: {
     imageUrl: string;
@@ -62,7 +63,7 @@ export async function runInpaint(opts: {
     prompt?: string;
     /** BYOK — 사용자 Replicate token. */
     userReplicateKey?: string | null;
-}): Promise<string> {
+}): Promise<Buffer> {
     const replicate = getReplicate(opts.userReplicateKey);
     const prompt = opts.prompt
         || 'Remove all text and restore the original background seamlessly. Match surrounding colors, textures, lighting and style. No text should remain.';
@@ -78,9 +79,5 @@ export async function runInpaint(opts: {
         },
     } as any);
 
-    // Replicate 응답: string URL 또는 string[] 또는 ReadableStream 등.
-    if (typeof output === 'string') return output;
-    if (Array.isArray(output) && typeof output[0] === 'string') return output[0];
-    // ReadableStream 인 경우 직접 fetch 후 처리해야 — 우선 URL 형태만 지원.
-    throw new Error('FLUX Fill 응답 형식 미지원: ' + JSON.stringify(output).slice(0, 100));
+    return replicateOutputToBuffer(output);
 }

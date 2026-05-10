@@ -199,8 +199,8 @@ export async function POST(req: NextRequest) {
         const maskKey = `pdp/${userId}/${product.id}/${taskId}/mask.png`;
         const maskR2Url = await uploadToR2(maskKey, maskBuf, 'image/png');
 
-        // === Step 5: FLUX 인페인팅 ===
-        const inpaintedUrl = await runInpaint({
+        // === Step 5: FLUX 인페인팅 (buffer 직접 반환) ===
+        const inpaintedBuf = await runInpaint({
             imageUrl: originalR2Url,
             maskUrl: maskR2Url,
             userReplicateKey: inpaintByokInfo.userKey,
@@ -214,8 +214,7 @@ export async function POST(req: NextRequest) {
         if (!inpaintSpend.ok) throw new Error(inpaintSpend.error || '잔액 부족 (INPAINT)');
         creditsUsed += inpaintCost;
 
-        // === Step 6: 인페인팅 결과 다운로드 + R2 별도 저장 (재합성 위해) + 텍스트 합성 ===
-        const inpaintedBuf = await fetchAsBuffer(inpaintedUrl);
+        // === Step 6: 인페인팅 buffer R2 별도 저장 (재합성 위해) + 텍스트 합성 ===
         const inpaintedKey = `pdp/${userId}/${product.id}/${taskId}/inpainted.png`;
         const inpaintedR2Url = await uploadToR2(inpaintedKey, inpaintedBuf, 'image/png');
 

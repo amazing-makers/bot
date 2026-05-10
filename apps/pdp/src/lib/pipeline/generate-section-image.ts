@@ -17,7 +17,7 @@
 
 import sharp from 'sharp';
 import { getReplicate, FLUX_PRO_MODEL } from '../ai/replicate';
-import { fetchAsBuffer } from '../storage/r2';
+import { replicateOutputToBuffer } from '../ai/replicate-output';
 import type { SectionType } from './generate-outline';
 
 interface SectionImageSize {
@@ -69,16 +69,8 @@ export async function generateSectionImage(opts: {
         },
     } as any);
 
-    let imageUrl: string | null = null;
-    if (typeof output === 'string') imageUrl = output;
-    else if (Array.isArray(output) && typeof output[0] === 'string') imageUrl = output[0];
-
-    if (!imageUrl) {
-        throw new Error('FLUX 응답 형식 미지원: ' + JSON.stringify(output).slice(0, 200));
-    }
-
-    // Replicate 임시 URL → buffer (24시간 후 만료, 즉시 R2 로 옮겨야 함)
-    const rawBuffer = await fetchAsBuffer(imageUrl);
+    // URL/stream/FileOutput 모두 buffer 로 변환 (Replicate 응답 형식 다양)
+    const rawBuffer = await replicateOutputToBuffer(output);
 
     // 1080px 폭 정규화 — 섹션 합성 (Phase 3.3) 시 일관성.
     const normalized = await sharp(rawBuffer)
