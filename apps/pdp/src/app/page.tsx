@@ -18,6 +18,15 @@ interface ExtractedImage {
     type: 'main' | 'detail';
 }
 
+interface BatchState {
+    productId?: string;
+    total: number;
+    done: number;
+    failed: number;
+    currentIndex?: number;
+    completed: boolean;
+}
+
 interface RegionResult {
     bboxX: number;
     bboxY: number;
@@ -48,6 +57,12 @@ export default function HomePage() {
     const [processProgress, setProcessProgress] = useState(0);
     const [processResult, setProcessResult] = useState<ProcessResult | null>(null);
     const [processError, setProcessError] = useState<string>('');
+
+    // Phase 1.3 — 일괄 처리
+    const [batch, setBatch] = useState<BatchState | null>(null);
+    const [extractedSourceUrl, setExtractedSourceUrl] = useState<string>('');
+    const [extractedSource, setExtractedSource] = useState<string>('generic');
+    const [extractedTitle, setExtractedTitle] = useState<string | undefined>();
 
     const handleProcess = async (img: ExtractedImage) => {
         setActiveImage(img);
@@ -114,9 +129,13 @@ export default function HomePage() {
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || '추출 실패');
             setImages(data.images || []);
+            setExtractedSourceUrl(url);
+            setExtractedSource(data.source || 'generic');
+            setExtractedTitle(data.title);
+            setBatch(null);
             notifications.show({
                 title: '✅ 이미지 추출 완료',
-                message: `${data.images?.length || 0}개 이미지를 가져왔어요. 각 이미지를 클릭해 글자 제거 + 한국어 합성을 진행하세요.`,
+                message: `${data.images?.length || 0}개 이미지. 한 장씩 클릭하거나 '전체 처리' 로 한 번에.`,
                 color: 'teal',
             });
         } catch (e: any) {
@@ -124,6 +143,46 @@ export default function HomePage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleBatchProcess = async () => {
+        if (images.length === 0) return;
+        if (!confirm(`${images.length}장을 한 번에 처리합니다. 약 ${images.length}~${images.length * 3}분 소요. 계속할까요?`)) return;
+
+        let productId: string | undefined;
+        setBatch({ total: images.length, done: 0, failed: 0, completed: false });
+
+        for (let i = 0; i < images.length; i++) {
+            const img = images[i];
+            setBatch((prev) => prev && { ...prev, currentIndex: i });
+            try {
+                const r = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        imageUrl: img.url,
+                        productId,
+                        sourceUrl: extractedSourceUrl,
+                        productTitle: extractedTitle,
+                        productSource: extractedSource,
+                    }),
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.error || '처리 실패');
+                if (!productId && data.productId) productId = data.productId;
+                setBatch((prev) => prev && { ...prev, productId, done: prev.done + 1 });
+            } catch (e: any) {
+                setBatch((prev) => prev && { ...prev, failed: prev.failed + 1 });
+                console.warn('[batch] item failed', i, e);
+            }
+        }
+        setBatch((prev) => prev && { ...prev, completed: true });
+        notifications.show({
+            title: '🎉 전체 처리 완료',
+            message: '대시보드에서 ZIP 다운로드 가능',
+            color: 'teal',
+            autoClose: 8000,
+        });
     };
 
     return (
@@ -141,7 +200,8 @@ export default function HomePage() {
                         <Group gap="md">
                             <Anchor href="#workflow" size="sm" c="dimmed">사용 흐름</Anchor>
                             <Anchor href="#pricing" size="sm" c="dimmed">가격</Anchor>
-                            <Button variant="subtle" size="xs">로그인</Button>
+                            <Button component="a" href="/dashboard" variant="light" size="xs">대시보드</Button>
+                            <Button component="a" href="/login" variant="subtle" size="xs">로그인</Button>
                         </Group>
                     </Group>
                 </Container>
@@ -206,15 +266,67 @@ export default function HomePage() {
                     {images.length > 0 && (
                         <Card withBorder shadow="md" p="lg" radius="md" mb="xl">
                             <Stack gap="sm">
-                                <Group justify="space-between">
+                                <Group justify="space-between" wrap="wrap">
                                     <Group gap="xs">
                                         <ThemeIcon variant="light" color="teal"><IconDownload size={18} /></ThemeIcon>
                                         <Text fw={700}>2단계: 처리할 이미지 선택 ({images.length}장)</Text>
                                     </Group>
-                                    <Button variant="light" leftSection={<IconLanguage size={16} />}>
-                                        모든 이미지 한국어 합성
-                                    </Button>
+                                    <Group gap="xs">
+                                        <Button
+                                            color="violet"
+                                            leftSection={<IconLanguage size={16} />}
+                                            onClick={handleBatchProcess}
+                                            loading={!!batch && !batch.completed}
+                                            disabled={!!batch && !batch.completed}
+                                        >
+                                            전체 {images.length}장 한 번에 처리
+                                        </Button>
+                                    </Group>
                                 </Group>
+
+                                {/* batch 진행 상황 */}
+                                {batch && (
+                                    <Paper withBorder p="md" radius="md" bg={batch.completed ? 'teal.0' : 'violet.0'}>
+                                        <Group justify="space-between" mb="xs">
+                                            <Group gap="xs">
+                                                {!batch.completed ? <Loader size="xs" color="violet" /> : <IconCheck size={18} color="var(--mantine-color-teal-6)" />}
+                                                <Text fw={600} size="sm">
+                                                    {batch.completed
+                                                        ? `완료 — 성공 ${batch.done}장 / 실패 ${batch.failed}장`
+                                                        : `처리 중 (${batch.done + batch.failed}/${batch.total}장)`}
+                                                </Text>
+                                            </Group>
+                                            {batch.completed && batch.productId && (
+                                                <Group gap="xs">
+                                                    <Button
+                                                        component="a"
+                                                        href={`/api/products/${batch.productId}/zip`}
+                                                        download
+                                                        size="xs"
+                                                        color="teal"
+                                                        leftSection={<IconDownload size={12} />}
+                                                    >
+                                                        전체 ZIP 다운로드
+                                                    </Button>
+                                                    <Button
+                                                        component="a"
+                                                        href={`/product/${batch.productId}`}
+                                                        size="xs"
+                                                        variant="light"
+                                                    >
+                                                        상세 보기
+                                                    </Button>
+                                                </Group>
+                                            )}
+                                        </Group>
+                                        <Progress
+                                            value={(batch.done + batch.failed) / batch.total * 100}
+                                            color={batch.failed > 0 ? 'orange' : (batch.completed ? 'teal' : 'violet')}
+                                            animated={!batch.completed}
+                                            striped={!batch.completed}
+                                        />
+                                    </Paper>
+                                )}
                                 <SimpleGrid cols={{ base: 2, sm: 3, lg: 4 }}>
                                     {images.map((img, i) => (
                                         <Card

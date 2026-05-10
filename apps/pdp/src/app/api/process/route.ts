@@ -32,6 +32,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 import { auth } from '@/auth';
+import { prisma } from '@/lib/prisma';
 import { detectTextRegions } from '@/lib/pipeline/ocr';
 import { buildMaskPng, runInpaint } from '@/lib/pipeline/inpaint';
 import { translateRegionsBatch } from '@/lib/pipeline/translate';
@@ -55,9 +56,17 @@ export async function POST(req: NextRequest) {
 
     let imageUrl: string;
     let userOverrides: Record<number, string> = {};
+    let productId: string | undefined;
+    let sourceUrl: string | undefined;
+    let productTitle: string | undefined;
+    let productSource: string = 'generic';
     try {
         const body = await req.json();
         imageUrl = String(body?.imageUrl || '').trim();
+        productId = body?.productId ? String(body.productId) : undefined;
+        sourceUrl = body?.sourceUrl ? String(body.sourceUrl) : undefined;
+        productTitle = body?.productTitle ? String(body.productTitle) : undefined;
+        productSource = body?.productSource ? String(body.productSource) : 'generic';
         if (body?.userOverrides && typeof body.userOverrides === 'object') {
             userOverrides = body.userOverrides;
         }
@@ -68,11 +77,36 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'JSON body 파싱 실패' }, { status: 400 });
     }
 
+    // Product upsert — productId 가 있으면 그것 사용, 없으면 sourceUrl 기반 + userId 로 신규 또는 매칭.
+    // sourceUrl 도 없으면 imageUrl 자체를 sourceUrl 로 (단일 이미지 처리).
+    let product = productId
+        ? await prisma.product.findFirst({ where: { id: productId, userId } })
+        : null;
+    if (!product) {
+        product = await prisma.product.create({
+            data: {
+                userId,
+                sourceUrl: sourceUrl || imageUrl,
+                source: productSource,
+                title: productTitle,
+            },
+        });
+    }
+
     // 잔액 사전 체크 (실제 차감은 단계 성공 시마다)
     const totalEstimated = CREDIT_RATES.OCR + CREDIT_RATES.INPAINT + CREDIT_RATES.TRANSLATE + CREDIT_RATES.COMPOSE;
 
     let creditsUsed = 0;
     const taskId = randomUUID();
+
+    // ScrapedImage 생성 (이번 호출의 원본 이미지)
+    const scrapedImage = await prisma.scrapedImage.create({
+        data: {
+            productId: product.id,
+            sourceUrl: imageUrl,
+            type: 'detail',
+        },
+    });
 
     try {
         // === Step 1: 원본 이미지 R2 백업 ===
@@ -81,8 +115,12 @@ export async function POST(req: NextRequest) {
         const originW = meta.width || 800;
         const originH = meta.height || 800;
 
-        const originalKey = `pdp/${userId}/${taskId}/original.png`;
+        const originalKey = `pdp/${userId}/${product.id}/${taskId}/original.png`;
         const originalR2Url = await uploadToR2(originalKey, await sharp(originalBuf).png().toBuffer(), 'image/png');
+        await prisma.scrapedImage.update({
+            where: { id: scrapedImage.id },
+            data: { r2Url: originalR2Url, width: originW, height: originH },
+        });
 
         // === Step 2: GPT-4 Vision OCR ===
         const regions = await detectTextRegions(originalR2Url);
@@ -96,9 +134,22 @@ export async function POST(req: NextRequest) {
         creditsUsed += CREDIT_RATES.OCR;
 
         if (regions.length === 0) {
-            // 텍스트 없는 이미지 — 인페인팅 skip, 원본 그대로 결과
+            // 텍스트 없는 이미지 — 인페인팅 skip, 원본 그대로 결과 + DB 에 OutputImage 동일하게 저장
+            await prisma.outputImage.create({
+                data: {
+                    productId: product.id,
+                    sourceImageId: scrapedImage.id,
+                    r2Url: originalR2Url,
+                    width: originW,
+                    height: originH,
+                    mode: 'inpaint_translate',
+                    creditsUsed,
+                    metadata: { skippedReason: 'no_text_detected' } as any,
+                },
+            });
             return NextResponse.json({
                 ok: true,
+                productId: product.id,
                 outputUrl: originalR2Url,
                 regions: [],
                 creditsUsed,
@@ -120,9 +171,24 @@ export async function POST(req: NextRequest) {
         // 사용자 직접 입력 오버라이드 적용
         const finalTexts = translations.map((t, i) => userOverrides[i] || t);
 
+        // TextRegion DB 저장
+        await prisma.textRegion.createMany({
+            data: regions.map((r, i) => ({
+                scrapedImageId: scrapedImage.id,
+                bboxX: r.bboxX,
+                bboxY: r.bboxY,
+                bboxW: r.bboxW,
+                bboxH: r.bboxH,
+                originalText: r.originalText,
+                sourceLanguage: r.sourceLanguage,
+                translatedText: finalTexts[i],
+                userOverride: userOverrides[i],
+            })),
+        });
+
         // === Step 4: 마스크 PNG 생성 + R2 업로드 ===
         const maskBuf = await buildMaskPng(originW, originH, regions);
-        const maskKey = `pdp/${userId}/${taskId}/mask.png`;
+        const maskKey = `pdp/${userId}/${product.id}/${taskId}/mask.png`;
         const maskR2Url = await uploadToR2(maskKey, maskBuf, 'image/png');
 
         // === Step 5: FLUX 인페인팅 ===
@@ -156,12 +222,25 @@ export async function POST(req: NextRequest) {
         if (!composeSpend.ok) throw new Error(composeSpend.error || '잔액 부족 (COMPOSE)');
         creditsUsed += CREDIT_RATES.COMPOSE;
 
-        // === Step 7: 결과 R2 업로드 ===
-        const outputKey = `pdp/${userId}/${taskId}/output.png`;
+        // === Step 7: 결과 R2 업로드 + OutputImage DB 저장 ===
+        const outputKey = `pdp/${userId}/${product.id}/${taskId}/output.png`;
         const outputUrl = await uploadToR2(outputKey, finalBuf, 'image/png');
+        await prisma.outputImage.create({
+            data: {
+                productId: product.id,
+                sourceImageId: scrapedImage.id,
+                r2Url: outputUrl,
+                width: originW,
+                height: originH,
+                mode: 'inpaint_translate',
+                creditsUsed,
+                metadata: { taskId, regionCount: regions.length } as any,
+            },
+        });
 
         return NextResponse.json({
             ok: true,
+            productId: product.id,
             outputUrl,
             regions: regions.map((r, i) => ({
                 ...r,
