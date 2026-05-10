@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import {
-    Card, Stack, Group, Text, Badge, Button, Box, Paper, ThemeIcon, Textarea, Divider,
+    Card, Stack, Group, Text, Badge, Button, Box, Paper, ThemeIcon, Textarea, Divider, Image,
 } from '@mantine/core';
 import {
-    IconLayoutGrid, IconRefresh, IconSparkles, IconCopy, IconArrowDown,
+    IconLayoutGrid, IconRefresh, IconSparkles, IconCopy, IconArrowDown, IconPhoto, IconCheck,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 
@@ -16,6 +16,9 @@ interface PageSection {
     cta?: string;
     imagePrompt?: string;
     preview?: string;
+    /** Phase 3.2 — FLUX 로 생성된 섹션 이미지 (R2 URL). 없으면 미생성. */
+    generatedImageUrl?: string;
+    generatedImageOutputId?: string;
 }
 
 interface Outline {
@@ -44,6 +47,41 @@ export default function GeneratedPageOutline({
     const [loading, setLoading] = useState(false);
     const [showBrief, setShowBrief] = useState(false);
     const [brief, setBrief] = useState('');
+    /** sectionIdx → loading 여부 (Phase 3.2 이미지 생성 진행 중인 섹션). */
+    const [imageLoading, setImageLoading] = useState<Record<number, boolean>>({});
+
+    const handleGenerateImage = async (sectionIdx: number, imagePrompt?: string) => {
+        setImageLoading(prev => ({ ...prev, [sectionIdx]: true }));
+        try {
+            const r = await fetch(`/api/products/${productId}/generate-section-image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sectionIdx, imagePrompt }),
+            });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error || '이미지 생성 실패');
+
+            // outline 의 해당 section 에 generatedImageUrl 반영
+            setOutline(prev => {
+                if (!prev) return prev;
+                const updated = prev.sections.map((s, i) =>
+                    i === sectionIdx
+                        ? { ...s, generatedImageUrl: data.r2Url, generatedImageOutputId: data.outputImageId }
+                        : s,
+                );
+                return { ...prev, sections: updated };
+            });
+            notifications.show({
+                title: '✨ 섹션 이미지 생성 완료',
+                message: `${data.creditsUsed} credits 사용 · 잔액 ${data.balanceAfter}`,
+                color: 'teal',
+            });
+        } catch (e: any) {
+            notifications.show({ title: '이미지 생성 실패', message: e?.message || '오류', color: 'red' });
+        } finally {
+            setImageLoading(prev => ({ ...prev, [sectionIdx]: false }));
+        }
+    };
 
     const handleGenerate = async () => {
         setLoading(true);
@@ -171,9 +209,36 @@ export default function GeneratedPageOutline({
                                 {s.imagePrompt && (
                                     <>
                                         <Divider my="xs" />
-                                        <Text size="11px" c="dimmed">
-                                            <strong>이미지 prompt:</strong> {s.imagePrompt}
-                                        </Text>
+                                        <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
+                                            <Text size="11px" c="dimmed" style={{ flex: 1 }}>
+                                                <strong>이미지 prompt:</strong> {s.imagePrompt}
+                                            </Text>
+                                            <Button
+                                                size="compact-xs"
+                                                variant={s.generatedImageUrl ? 'subtle' : 'light'}
+                                                color={s.generatedImageUrl ? 'gray' : 'pink'}
+                                                loading={imageLoading[i]}
+                                                leftSection={s.generatedImageUrl ? <IconRefresh size={12} /> : <IconPhoto size={12} />}
+                                                onClick={() => handleGenerateImage(i, s.imagePrompt)}
+                                            >
+                                                {s.generatedImageUrl ? '재생성' : '이미지 생성'} (20 credits)
+                                            </Button>
+                                        </Group>
+                                        {s.generatedImageUrl && (
+                                            <Box mt="xs">
+                                                <Group gap={4} mb={4}>
+                                                    <IconCheck size={12} color="var(--mantine-color-teal-6)" />
+                                                    <Text size="11px" c="teal" fw={600}>FLUX 1.1 Pro 생성 완료</Text>
+                                                </Group>
+                                                <Image
+                                                    src={s.generatedImageUrl}
+                                                    radius="sm"
+                                                    fit="contain"
+                                                    mah={300}
+                                                    alt={`${meta.label} 이미지`}
+                                                />
+                                            </Box>
+                                        )}
                                     </>
                                 )}
                             </Paper>
@@ -183,7 +248,7 @@ export default function GeneratedPageOutline({
             </Stack>
 
             <Text size="xs" c="dimmed" mt="md" ta="center">
-                ⓘ Phase 3.2 (이미지 생성) + 3.3 (레이아웃 합성) 으로 한 장 PNG 자동 완성 — 다음 업데이트.
+                ⓘ 섹션별 이미지 생성 (Phase 3.2) 완료 — 다음은 Phase 3.3 (전체 합성 1장 PNG).
             </Text>
         </Card>
     );
