@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import ProductAnalysis from '@/components/ProductAnalysis';
 import RecomposeForm from '@/components/RecomposeForm';
 import GeneratedPageOutline from '@/components/GeneratedPageOutline';
+import CreateDesignButton from '@/components/CreateDesignButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +68,9 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                             <Badge variant="light">{product.source}</Badge>
                         </Group>
                         <Group gap="xs">
+                            {/* Phase 4: designbot 광고 디자인 자동 생성 */}
+                            <CreateDesignButton productId={product.id} />
+
                             {product.outputImages.length > 0 && (
                                 <Button
                                     component="a"

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { AppShell, Container, Group, ThemeIcon, Title, Anchor, Box, TextInput, Button } from '@mantine/core';
-import { IconBrush, IconArrowLeft, IconDeviceFloppy, IconSparkles } from '@tabler/icons-react';
+import { AppShell, Container, Group, ThemeIcon, Title, Anchor, Box, TextInput, Button, Menu, ActionIcon } from '@mantine/core';
+import { IconBrush, IconArrowLeft, IconDeviceFloppy, IconSparkles, IconBookmark, IconDownload, IconShare, IconDots } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,7 @@ import Toolbar from './Toolbar';
 import LayersPanel from './LayersPanel';
 import PropertyPanel from './PropertyPanel';
 import AiGenerateModal from './AiGenerateModal';
+import SaveTemplateModal from './SaveTemplateModal';
 
 // react-konva 는 'canvas' module 을 SSR 시 require — Next.js 에서 dynamic + ssr:false 필수.
 const Canvas = dynamic(() => import('./Canvas'), { ssr: false });
@@ -31,6 +32,7 @@ export default function EditorShell({
     const [title, setTitle] = useState(initialTitle || '제목 없음');
     const [saving, setSaving] = useState(false);
     const [aiOpen, setAiOpen] = useState(false);
+    const [templateOpen, setTemplateOpen] = useState(false);
     const stageRef = useRef<Konva.Stage | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -77,16 +79,53 @@ export default function EditorShell({
         a.download = `${title.replace(/[^\w가-힯-]/g, '-')}.png`;
         a.click();
 
-        // 동시에 서버에 thumbnail 로 저장
+        // 동시에 서버에 thumbnail 로 저장 + R2 URL 캐시
         try {
-            await fetch(`/api/designs/${designId}/thumbnail`, {
+            const r = await fetch(`/api/designs/${designId}/thumbnail`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ dataUrl }),
             });
+            const data = await r.json();
+            if (data?.url) {
+                (window as any).__lastExportUrl = data.url;
+            }
         } catch { /* thumbnail 저장 실패해도 export 는 성공 */ }
 
         notifications.show({ title: '📥 PNG 다운로드', message: '브라우저 다운로드 폴더 확인', color: 'teal' });
+    };
+
+    /** PNG URL 복사 (마케팅봇 등 외부 공유용). thumbnail 없으면 먼저 생성. */
+    const handleCopyImageUrl = async () => {
+        const stage = stageRef.current;
+        let url: string | null = (window as any).__lastExportUrl || null;
+
+        if (!url) {
+            if (!stage) { notifications.show({ message: 'PNG 내보내기 후 공유 가능합니다', color: 'orange' }); return; }
+            const dataUrl = stage.toDataURL({ mimeType: 'image/png', pixelRatio: 1 / (stage.scaleX() || 1), quality: 1 });
+            try {
+                const r = await fetch(`/api/designs/${designId}/thumbnail`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dataUrl }),
+                });
+                const data = await r.json();
+                url = data?.url || null;
+                if (url) (window as any).__lastExportUrl = url;
+            } catch { /* ignore */ }
+        }
+
+        if (!url) {
+            notifications.show({ message: 'R2 스토리지가 설정되지 않아 URL 복사가 불가합니다', color: 'orange' });
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(url);
+            notifications.show({ title: '✅ URL 복사됨', message: '마케팅봇·SNS 등에 붙여넣기 하세요', color: 'teal', autoClose: 2000 });
+        } catch {
+            notifications.show({ message: url, color: 'blue' });
+        }
     };
 
     const handleUploadImage = () => {
@@ -142,12 +181,34 @@ export default function EditorShell({
                                 onClick={() => setAiOpen(true)}
                                 variant="gradient"
                                 gradient={{ from: 'pink', to: 'orange' }}
+                                size="sm"
                             >
                                 AI 생성
                             </Button>
-                            <Button leftSection={<IconDeviceFloppy size={14} />} onClick={handleSave} loading={saving} variant="light">
+                            <Button leftSection={<IconDeviceFloppy size={14} />} onClick={handleSave} loading={saving} variant="light" size="sm">
                                 저장
                             </Button>
+                            <Menu shadow="md" width={200} position="bottom-end">
+                                <Menu.Target>
+                                    <ActionIcon variant="default" size="lg" aria-label="더보기">
+                                        <IconDots size={16} />
+                                    </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown>
+                                    <Menu.Label>내보내기</Menu.Label>
+                                    <Menu.Item leftSection={<IconDownload size={14} />} onClick={handleExport}>
+                                        PNG 다운로드
+                                    </Menu.Item>
+                                    <Menu.Item leftSection={<IconShare size={14} />} onClick={handleCopyImageUrl}>
+                                        이미지 URL 복사
+                                    </Menu.Item>
+                                    <Menu.Divider />
+                                    <Menu.Label>템플릿</Menu.Label>
+                                    <Menu.Item leftSection={<IconBookmark size={14} />} onClick={() => setTemplateOpen(true)}>
+                                        템플릿으로 저장
+                                    </Menu.Item>
+                                </Menu.Dropdown>
+                            </Menu>
                         </Group>
                     </Group>
                 </Container>
@@ -157,6 +218,13 @@ export default function EditorShell({
                 designId={designId}
                 opened={aiOpen}
                 onClose={() => setAiOpen(false)}
+            />
+
+            <SaveTemplateModal
+                designId={designId}
+                defaultTitle={title}
+                opened={templateOpen}
+                onClose={() => setTemplateOpen(false)}
             />
 
             <AppShell.Main>

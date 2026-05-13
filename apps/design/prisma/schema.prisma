@@ -8,14 +8,14 @@
 // 같은 schema 내용을 양쪽이 동기화 — 충돌 방지를 위해 pdp 전용 모델만 신규 마이그레이션 으로 추가.
 
 generator client {
-    provider        = "prisma-client-js"
-    previewFeatures = ["driverAdapters"]
-    output          = "../node_modules/.prisma/client"
+    provider = "prisma-client-js"
+    output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
     provider = "postgresql"
-    url      = env("DATABASE_URL")
+    // url 은 prisma.config.ts 의 migrate.adapter 에서 설정 (Prisma 7 requirement).
+    // 런타임 연결은 src/lib/prisma.ts 의 PrismaPg adapter 로 처리.
 }
 
 // ===== 공유 모델 (marketingbot 과 같은 테이블) =====
@@ -41,11 +41,12 @@ model User {
     currentWorkspaceId String?
 
     // 모든 봇 관련 관계 (같은 DB 공유)
-    products    Product[]
-    designs     Design[]
-    brandKits   BrandKit[]
-    credits     UserCredit?
-    apiKeys     UserApiKey[]
+    products         Product[]
+    designs          Design[]
+    brandKits        BrandKit[]
+    designTemplates  DesignTemplate[]
+    credits          UserCredit?
+    apiKeys          UserApiKey[]
 
     @@map("User")
 }
@@ -94,12 +95,42 @@ model Design {
     thumbnailUrl String?
     /** 템플릿 출처 (있는 경우). */
     templateKey  String?
+    /** pdpbot 연동 — 이 디자인이 어느 상품에서 시드됐는지. */
+    sourceProductId String?
     metadata     Json?    // 브랜드 색·폰트·AI 생성 prompt 등
     createdAt    DateTime @default(now())
     updatedAt    DateTime @updatedAt
 
     @@index([userId, updatedAt])
     @@map("Design")
+}
+
+// 사용자가 저장한 재사용 가능 디자인 템플릿.
+//
+// userId = null 이면 시스템(운영자) 기본 제공 템플릿.
+// 사용자 저장 시 isPublic = false (본인만 사용), 향후 공유 옵션 추가 가능.
+model DesignTemplate {
+    id           String   @id @default(cuid())
+    userId       String?
+    user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    title        String
+    description  String?
+    thumbnailUrl String?
+    sceneJson    Json
+    canvasSize   String   @default("custom")
+    canvasWidth  Int      @default(1080)
+    canvasHeight Int      @default(1080)
+    /** 검색·필터용 태그 — 'sns', 'commerce', 'coupang', 'instagram' 등. */
+    tags         String[]
+    /** 공개 템플릿 여부 (미래: 마켓플레이스). */
+    isPublic     Boolean  @default(false)
+    usageCount   Int      @default(0)
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    @@index([userId])
+    @@index([isPublic, usageCount])
+    @@map("DesignTemplate")
 }
 
 // 사용자가 직접 입력한 외부 AI 프로바이더 API 키 (BYOK = Bring Your Own Key).

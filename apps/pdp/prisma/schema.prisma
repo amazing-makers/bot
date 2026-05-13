@@ -8,14 +8,14 @@
 // 같은 schema 내용을 양쪽이 동기화 — 충돌 방지를 위해 pdp 전용 모델만 신규 마이그레이션 으로 추가.
 
 generator client {
-    provider        = "prisma-client-js"
-    previewFeatures = ["driverAdapters"]
-    output          = "../node_modules/.prisma/client"
+    provider = "prisma-client-js"
+    output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
     provider = "postgresql"
-    url      = env("DATABASE_URL")
+    // url 은 prisma.config.ts 의 migrate.adapter 에서 설정 (Prisma 7 requirement).
+    // 런타임 연결은 src/lib/prisma.ts 의 PrismaPg adapter 로 처리.
 }
 
 // ===== 공유 모델 (marketingbot 과 같은 테이블) =====
