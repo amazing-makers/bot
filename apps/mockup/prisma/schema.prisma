@@ -1,0 +1,88 @@
+generator client {
+    provider = "prisma-client-js"
+    output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+enum UserRole { USER ADMIN }
+
+model User {
+    id        String   @id @default(cuid())
+    email     String   @unique
+    password  String
+    name      String?
+    role      UserRole @default(USER)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    mockups   Mockup[]
+    credits   UserCredit?
+    apiKeys   UserApiKey[]
+    @@map("User")
+}
+
+model UserApiKey {
+    id           String   @id @default(cuid())
+    userId       String
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    provider     String
+    encryptedKey String   @db.Text
+    maskedHint   String
+    lastUsedAt   DateTime?
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+    @@unique([userId, provider])
+    @@map("UserApiKey")
+}
+
+model UserCredit {
+    id        String   @id @default(cuid())
+    userId    String   @unique
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    balance   Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    transactions CreditTransaction[]
+    @@map("UserCredit")
+}
+
+model CreditTransaction {
+    id           String     @id @default(cuid())
+    userCreditId String
+    userCredit   UserCredit @relation(fields: [userCreditId], references: [id], onDelete: Cascade)
+    delta        Int
+    balanceAfter Int
+    bot          String?
+    action       String
+    refType      String?
+    refId        String?
+    metadata     Json?
+    createdAt    DateTime   @default(now())
+    @@map("CreditTransaction")
+}
+
+// mockupbot 전용 모델
+model Mockup {
+    id              String   @id @default(cuid())
+    userId          String
+    user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    title           String?
+    // 입력: 사용자 상품 이미지 (R2 URL or external URL)
+    productImageUrl String
+    // 목업 컨텍스트 타입 ('tshirt' | 'mug' | 'poster' | 'billboard' | 'tote' | 'phone_case' | 'hoodie' | 'frame')
+    mockupType      String
+    // 커스텀 프롬프트 (옵션)
+    customPrompt    String?
+    // 출력: FLUX Kontext 생성 결과 (R2)
+    outputUrl       String?
+    thumbnailUrl    String?
+    creditsUsed     Int?
+    status          String   @default("pending") // 'pending' | 'generating' | 'done' | 'failed'
+    metadata        Json?
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
+    @@index([userId, createdAt])
+    @@map("Mockup")
+}
