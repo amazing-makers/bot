@@ -6,7 +6,7 @@ import {
     AppShell, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon,
     Box, Image, Anchor, Paper, Tabs,
 } from '@mantine/core';
-import { IconBrush, IconCoin, IconClock, IconPalette, IconLayoutGrid } from '@tabler/icons-react';
+import { IconBrush, IconCoin, IconClock, IconPalette, IconLayoutGrid, IconShoppingCart } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import { CANVAS_PRESETS } from '@/lib/design/types';
@@ -58,9 +58,18 @@ export default async function DashboardPage() {
                             </Group>
                         </Anchor>
                         <Group gap="md">
-                            <Badge variant="light" color="violet" size="lg" leftSection={<IconCoin size={14} />}>
+                            <Badge
+                                variant="light" color="violet" size="lg"
+                                leftSection={<IconCoin size={14} />}
+                                style={{ cursor: 'pointer' }}
+                                component={Link}
+                                href="/dashboard/billing"
+                            >
                                 {balance.toLocaleString()} credits
                             </Badge>
+                            <Button component={Link} href="/pricing" size="xs" variant="subtle" color="teal" leftSection={<IconShoppingCart size={14} />}>
+                                충전
+                            </Button>
                             <Button component={Link} href="/dashboard/brand" size="xs" variant="subtle" color="violet" leftSection={<IconPalette size={14} />}>
                                 브랜드 키트
                             </Button>

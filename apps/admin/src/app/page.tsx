@@ -7,7 +7,7 @@ import {
 } from '@mantine/core';
 import {
     IconUsers, IconChartBar, IconRobot, IconCash, IconBolt, IconSpeakerphone,
-    IconActivity, IconAlertTriangle, IconClock, IconUserPlus,
+    IconActivity, IconAlertTriangle, IconClock, IconUserPlus, IconBrush, IconPhoto, IconCoin,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
@@ -34,6 +34,15 @@ async function getStats() {
         todayFailed,
         activeAgents,
         recentErrorTasks,
+        // pdpbot + designbot stats
+        totalProducts,
+        productsThisMonth,
+        totalDesigns,
+        designsThisMonth,
+        totalTemplates,
+        // credit stats
+        totalCreditBalance,
+        creditsUsedThisMonth,
     ] = await Promise.all([
         prisma.user.count(),
         prisma.user.count({ where: { createdAt: { gte: monthStart } } }),
@@ -55,6 +64,19 @@ async function getStats() {
                 channel: { select: { type: true } },
             },
         }),
+        // pdpbot
+        (prisma as any).product.count().catch(() => 0),
+        (prisma as any).product.count({ where: { createdAt: { gte: monthStart } } }).catch(() => 0),
+        // designbot
+        (prisma as any).design.count().catch(() => 0),
+        (prisma as any).design.count({ where: { createdAt: { gte: monthStart } } }).catch(() => 0),
+        (prisma as any).designTemplate.count().catch(() => 0),
+        // credit
+        (prisma as any).userCredit.aggregate({ _sum: { balance: true } }).then((r: any) => r._sum.balance || 0).catch(() => 0),
+        (prisma as any).creditTransaction.aggregate({
+            where: { delta: { lt: 0 }, createdAt: { gte: monthStart } },
+            _sum: { delta: true },
+        }).then((r: any) => Math.abs(r._sum.delta || 0)).catch(() => 0),
     ]);
 
     const todayTotal = todaySuccess + todayFailed;
@@ -75,6 +97,13 @@ async function getStats() {
         todaySuccessRate,
         activeAgents,
         recentErrorTasks,
+        totalProducts,
+        productsThisMonth,
+        totalDesigns,
+        designsThisMonth,
+        totalTemplates,
+        totalCreditBalance,
+        creditsUsedThisMonth,
     };
 }
 
@@ -235,6 +264,34 @@ export default async function AdminHome() {
                     </SimpleGrid>
                 </Stack>
 
+                {/* pdpbot + designbot 사용 현황 */}
+                <Stack gap={6}>
+                    <Title order={3}>🤖 봇 사용 현황</Title>
+                    <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+                        <StatCard
+                            icon={IconPhoto}
+                            color="violet"
+                            label="pdpbot 처리 상품"
+                            value={stats.totalProducts.toLocaleString()}
+                            hint={`이번 달 +${stats.productsThisMonth}개`}
+                        />
+                        <StatCard
+                            icon={IconBrush}
+                            color="pink"
+                            label="designbot 디자인"
+                            value={stats.totalDesigns.toLocaleString()}
+                            hint={`이번 달 +${stats.designsThisMonth}개 · 템플릿 ${stats.totalTemplates}개`}
+                        />
+                        <StatCard
+                            icon={IconCoin}
+                            color="orange"
+                            label="이번 달 credits 사용"
+                            value={stats.creditsUsedThisMonth.toLocaleString()}
+                            hint={`잔여 잔액 합계 ${stats.totalCreditBalance.toLocaleString()} cr`}
+                        />
+                    </SimpleGrid>
+                </Stack>
+
                 <Stack gap={6}>
                     <Title order={3}>🤖 봇 레지스트리</Title>
                     <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
@@ -247,17 +304,25 @@ export default async function AdminHome() {
                             users={stats.totalUsers}
                         />
                         <BotCard
+                            kind="pdp"
+                            title="상세페이지봇"
+                            desc="타오바오/쿠팡 상품 → 한국어 광고 이미지 자동 생성"
+                            domain="pdpbot.amakers.co.kr"
+                            status="BETA"
+                            users={stats.totalProducts}
+                        />
+                        <BotCard
                             kind="design"
                             title="디자인봇"
-                            desc="AI 디자인 템플릿 + 캔버스 에디터"
+                            desc="AI 광고 디자인 + Konva 캔버스 에디터 + 브랜드 키트"
                             domain="designbot.amakers.co.kr"
-                            status="PLANNED"
-                            users={0}
+                            status="BETA"
+                            users={stats.totalDesigns}
                         />
                         <BotCard
                             kind="mockup"
                             title="목업봇"
-                            desc="인쇄 출력 전 목업 미리보기 (티셔츠·머그·포스터 등)"
+                            desc="상품 이미지 → 티셔츠·머그·포스터 목업 AI 생성"
                             domain="mockupbot.amakers.co.kr"
                             status="PLANNED"
                             users={0}

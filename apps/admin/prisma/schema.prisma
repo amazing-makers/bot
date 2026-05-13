@@ -208,6 +208,70 @@ model ReferralCommission {
   @@map("ReferralCommission")
 }
 
+// ───────────────────────────────────────────────────────────
+//  pdpbot + designbot 미러 (read-only 통계용)
+// ───────────────────────────────────────────────────────────
+
+// 통합 credit 잔액 — 모든 봇 공유
+model UserCredit {
+  id        String   @id
+  userId    String   @unique
+  balance   Int
+  createdAt DateTime
+  updatedAt DateTime
+  transactions CreditTransaction[]
+  @@map("UserCredit")
+}
+
+model CreditTransaction {
+  id           String     @id
+  userCreditId String
+  userCredit   UserCredit @relation(fields: [userCreditId], references: [id])
+  delta        Int
+  balanceAfter Int
+  bot          String?
+  action       String
+  refType      String?
+  refId        String?
+  createdAt    DateTime
+  @@index([createdAt])
+  @@index([bot, createdAt])
+  @@map("CreditTransaction")
+}
+
+// pdpbot: 상품 처리 현황
+model Product {
+  id        String   @id
+  userId    String
+  source    String
+  title     String?
+  createdAt DateTime
+  @@index([userId, createdAt])
+  @@map("Product")
+}
+
+// designbot: 디자인 현황
+model Design {
+  id           String   @id
+  userId       String
+  canvasSize   String
+  templateKey  String?
+  createdAt    DateTime
+  updatedAt    DateTime
+  @@index([userId, createdAt])
+  @@map("Design")
+}
+
+model DesignTemplate {
+  id        String   @id
+  userId    String?
+  isPublic  Boolean
+  usageCount Int
+  createdAt DateTime
+  @@index([userId])
+  @@map("DesignTemplate")
+}
+
 // Phase 25 미러 — 사용자 피드백 (admin read-only)
 model UserFeedback {
   id        String   @id
