@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AppShell, Container, Group, ThemeIcon, Title, Anchor, Box, TextInput, Button } from '@mantine/core';
-import { IconBrush, IconArrowLeft, IconDeviceFloppy } from '@tabler/icons-react';
+import { IconBrush, IconArrowLeft, IconDeviceFloppy, IconSparkles } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,7 @@ import type { Scene } from '@/lib/design/types';
 import Toolbar from './Toolbar';
 import LayersPanel from './LayersPanel';
 import PropertyPanel from './PropertyPanel';
+import AiGenerateModal from './AiGenerateModal';
 
 // react-konva 는 'canvas' module 을 SSR 시 require — Next.js 에서 dynamic + ssr:false 필수.
 const Canvas = dynamic(() => import('./Canvas'), { ssr: false });
@@ -29,6 +30,7 @@ export default function EditorShell({
     const router = useRouter();
     const [title, setTitle] = useState(initialTitle || '제목 없음');
     const [saving, setSaving] = useState(false);
+    const [aiOpen, setAiOpen] = useState(false);
     const stageRef = useRef<Konva.Stage | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -134,12 +136,28 @@ export default function EditorShell({
                             style={{ flex: 1, maxWidth: 400 }}
                             variant="filled"
                         />
-                        <Button leftSection={<IconDeviceFloppy size={14} />} onClick={handleSave} loading={saving} variant="light">
-                            저장
-                        </Button>
+                        <Group gap="xs">
+                            <Button
+                                leftSection={<IconSparkles size={14} />}
+                                onClick={() => setAiOpen(true)}
+                                variant="gradient"
+                                gradient={{ from: 'pink', to: 'orange' }}
+                            >
+                                AI 생성
+                            </Button>
+                            <Button leftSection={<IconDeviceFloppy size={14} />} onClick={handleSave} loading={saving} variant="light">
+                                저장
+                            </Button>
+                        </Group>
                     </Group>
                 </Container>
             </AppShell.Header>
+
+            <AiGenerateModal
+                designId={designId}
+                opened={aiOpen}
+                onClose={() => setAiOpen(false)}
+            />
 
             <AppShell.Main>
                 <Box style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)' }}>
