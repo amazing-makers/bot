@@ -6,7 +6,7 @@ import {
     AppShell, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon,
     Box, Image, Anchor, Paper,
 } from '@mantine/core';
-import { IconBrush, IconPlus, IconCoin, IconClock } from '@tabler/icons-react';
+import { IconBrush, IconPlus, IconCoin, IconClock, IconPalette } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import { CANVAS_PRESETS } from '@/lib/design/types';
@@ -49,6 +49,9 @@ export default async function DashboardPage() {
                             <Badge variant="light" color="violet" size="lg" leftSection={<IconCoin size={14} />}>
                                 {balance.toLocaleString()} credits
                             </Badge>
+                            <Button component={Link} href="/dashboard/brand" size="xs" variant="subtle" color="violet" leftSection={<IconPalette size={14} />}>
+                                브랜드 키트
+                            </Button>
                             <Text size="sm" c="dimmed">{session?.user?.email}</Text>
                         </Group>
                     </Group>

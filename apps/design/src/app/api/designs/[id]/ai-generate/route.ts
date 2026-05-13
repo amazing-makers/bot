@@ -40,7 +40,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const body = await req.json().catch(() => ({}));
     const prompt: string = String(body?.prompt || '').trim();
     const withBackground: boolean = !!body?.withBackground;
-    const brandColors: string[] | undefined = Array.isArray(body?.brandColors) ? body.brandColors : undefined;
+    let brandColors: string[] | undefined = Array.isArray(body?.brandColors) ? body.brandColors : undefined;
+    const brandKitId: string | undefined = body?.brandKitId;
 
     if (!prompt || prompt.length < 3) {
         return NextResponse.json({ error: '프롬프트가 너무 짧음 (3자 이상)' }, { status: 400 });
@@ -49,6 +50,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const { id } = await ctx.params;
     const design = await (prisma as any).design.findFirst({ where: { id, userId } });
     if (!design) return NextResponse.json({ error: '디자인 없음' }, { status: 404 });
+
+    // brandColors 명시 X → brandKitId 또는 default kit 자동 적용
+    if (!brandColors) {
+        const kit = brandKitId
+            ? await (prisma as any).brandKit.findFirst({ where: { id: brandKitId, userId } })
+            : await (prisma as any).brandKit.findFirst({ where: { userId, isDefault: true } });
+        if (kit?.colors?.length) brandColors = kit.colors;
+    }
 
     const canvasWidth = design.canvasWidth || 1080;
     const canvasHeight = design.canvasHeight || 1080;

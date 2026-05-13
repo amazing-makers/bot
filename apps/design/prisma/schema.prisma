@@ -41,12 +41,38 @@ model User {
     currentWorkspaceId String?
 
     // 모든 봇 관련 관계 (같은 DB 공유)
-    products  Product[]
-    designs   Design[]
-    credits   UserCredit?
-    apiKeys   UserApiKey[]
+    products    Product[]
+    designs     Design[]
+    brandKits   BrandKit[]
+    credits     UserCredit?
+    apiKeys     UserApiKey[]
 
     @@map("User")
+}
+
+// 사용자의 브랜드 키트 — 디자인 자동 생성 시 색·로고·폰트 일관성 유지.
+//
+// 1 user 가 여러 브랜드 키트 가질 수 있음 (예: "본업 셀러" + "부수익 채널").
+// AI 생성 시 brandColors / logoUrl 자동 적용.
+model BrandKit {
+    id          String   @id @default(cuid())
+    userId      String
+    user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    name        String   // 'My Brand', '여름 캠페인' 등
+    /** 주요 색상 1~5개 hex. 첫 번째가 primary. */
+    colors      String[]
+    /** R2 URL — 투명 배경 PNG 권장. */
+    logoUrl     String?
+    /** 폰트 family 또는 preset key. */
+    fontFamily  String?
+    /** 추가 메타 (slogan, 카피 톤 등 — AI 가 참고). */
+    metadata    Json?
+    isDefault   Boolean  @default(false)
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    @@index([userId, updatedAt])
+    @@map("BrandKit")
 }
 
 // ===== design 전용 모델 =====
