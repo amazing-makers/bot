@@ -11,8 +11,9 @@
 |---|---|---|
 | 어드민봇 | ✅ 운영 | (안정 운영) |
 | 마케팅봇 | ✅ 운영 (별도 레포) | Phase 50 backlog 정리, MIGRATION 완료 후 합류 |
-| **pdpbot** | ✅ **Phase 1~3 완료** | **Phase 4 채널 자동 업로드 (쿠팡/네이버) 또는 사용자 베타 테스트** |
-| 디자인봇 | 📝 README only | pdpbot 완성 후 |
+| **pdpbot** | ✅ **Phase 1~3 완료** | 사용자 setup 대기 (Step 1~15) |
+| **designbot** | ✅ **Phase 1 MVP 완료** | Phase 2 AI 자동 생성 |
+| ~~디자인봇~~ | (=designbot) | — |
 | 모형봇 | 📝 미시작 | 후 |
 
 ## pdpbot 진행 현황

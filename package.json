@@ -10,9 +10,13 @@
   "scripts": {
     "dev:admin": "npm run dev --workspace=@amakers/admin",
     "dev:marketing": "npm run dev --workspace=@amakers/marketing",
+    "dev:pdp": "npm run dev --workspace=@amakers/pdp",
+    "dev:design": "npm run dev --workspace=@amakers/design",
     "build": "npm run build --workspaces --if-present",
     "build:admin": "npm run build --workspace=@amakers/admin",
     "build:marketing": "npm run build --workspace=@amakers/marketing",
+    "build:pdp": "npm run build --workspace=@amakers/pdp",
+    "build:design": "npm run build --workspace=@amakers/design",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "db:generate": "npm run generate --workspace=@amakers/db",
