@@ -31,6 +31,10 @@
 | 상세페이지봇 | pdp | pdpbot.amakers.co.kr (예정) | apps/pdp | @amakers/pdp | pdpbot (예정) | 🆕 scaffold 완료 |
 | 디자인봇 | design | designbot.amakers.co.kr (예정) | apps/design | @amakers/design | designbot (예정) | 📝 README만 |
 | 모형봇 | mockup | mockupbot.amakers.co.kr (예정) | apps/mockup | @amakers/mockup | mockupbot (예정) | 📝 미시작 |
+| 인스타봇 | instagram | instabot.amakers.co.kr (예정) | apps/instagram | @amakers/instagram | instabot (예정) | 🆕 scaffold (마케팅봇 IG 분리) |
+
+> ℹ️ 인스타봇은 "마케팅봇"을 **플랫폼별**(인스타·블로그·티스토리)로 쪼개는 새 분할 축의 첫 봇.
+> 영문 풀 호칭은 한 단어 컨벤션상 `instabot` (instagrambot 아님), 디렉토리·패키지는 `instagram`.
 
 ---
 
@@ -70,6 +74,7 @@ R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_URL  #
 | pdp | 3200 |
 | design | 3300 |
 | mockup | 3400 |
+| instagram | 3500 |
 
 ### DB 테이블 prefix
 - 공유 테이블 (모든 봇 사용): `User`, `Workspace`, `UserCredit`, `CreditTransaction`, `Subscription` — prefix 없음.
@@ -78,7 +83,7 @@ R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_URL  #
 
 ### Credit Transaction `bot` 필드값
 ```ts
-type Bot = 'marketingbot' | 'adminbot' | 'pdpbot' | 'designbot' | 'mockupbot';
+type Bot = 'marketingbot' | 'adminbot' | 'pdpbot' | 'designbot' | 'mockupbot' | 'instabot';
 ```
 모든 사용량 기록에 봇 명시 → 사용자 대시보드 / 분석에서 봇별 분리 가능.
 
