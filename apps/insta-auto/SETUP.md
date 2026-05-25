@@ -10,21 +10,25 @@ cp .env.example .env.local
 - `DATABASE_URL` / `NEXTAUTH_SECRET` — 마케팅봇 `.env.local` 에서 그대로 복사 (같은 DB · SSO).
 - `ENCRYPTION_KEY` — `openssl rand -hex 32` 로 새로 생성 (64글자 hex).
 
-## 2. DB 마이그레이션 (⚠️ 공유 운영 DB)
+## 2. DB 마이그레이션 (⚠️ 공유 DB — `db push` 쓰지 말 것)
 
-인스타봇은 공유 Supabase 에 신규 테이블 2개(`InstagramAccount`, `InstagramPost`)와
-enum 3개를 추가한다. **운영 DB 이므로 백업 후 진행.**
+인스타오토는 공유 DB 에 `InstagramAccount`/`InstagramPost` + enum 3개를 추가한다.
+
+> 🚫 **`prisma db push` 금지 (공유 DB).** db push 는 "이 앱 스키마 = DB 전체"로 간주해
+> **다른 앱(블로그·티스토리 등)의 테이블을 DROP 하려 한다** (실제로 그런 경고가 뜸).
+> 공유 DB 에는 항상 **추가 전용(idempotent) SQL** 을 `db execute` 로 적용한다.
 
 ```bash
-# Supabase 대시보드 → Database → Backups → Manual Backup 먼저!
-
 cd apps/insta-auto
 npx prisma generate            # 클라이언트 생성 (코드 타입체크용 — 항상 안전)
-npx prisma db push             # 신규 테이블/enum 만 추가 (기존 공유 테이블은 동일 정의라 변경 X)
+
+# 추가 전용 SQL 적용 (CREATE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS — 다른 테이블 미변경)
+npx prisma db execute --file ./prisma/manual/001_add_instagram_tables.sql
+#   (datasource 는 prisma.config.ts → .env.local 의 DATABASE_URL 사용. 운영 DB 면 백업 후.)
 ```
 
-> `db push` 는 schema 와 DB 차이만 반영. User/UserCredit/CreditTransaction 은 다른 봇과
-> 동일하게 정의돼 있어 변경이 생기지 않아야 정상 — diff 에 신규 Instagram* 만 보이는지 확인할 것.
+> 스키마에 컬럼/모델을 추가하면 `prisma/manual/001_add_instagram_tables.sql` 에도
+> `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS` 로 반영할 것.
 
 ## 3. 로컬 실행
 

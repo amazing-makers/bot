@@ -57,6 +57,10 @@ CREATE TABLE IF NOT EXISTS "InstagramPost" (
     CONSTRAINT "InstagramPost_pkey" PRIMARY KEY ("id")
 );
 
+-- ===== 신규 컬럼 (기존 테이블에 추가, idempotent) =====
+ALTER TABLE "InstagramPost" ADD COLUMN IF NOT EXISTS "attemptCount" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "InstagramPost" ADD COLUMN IF NOT EXISTS "lastAttemptAt" TIMESTAMP(3);
+
 -- ===== Indexes =====
 CREATE INDEX IF NOT EXISTS "InstagramAccount_userId_idx" ON "InstagramAccount"("userId");
 CREATE UNIQUE INDEX IF NOT EXISTS "InstagramAccount_userId_igUserId_key" ON "InstagramAccount"("userId", "igUserId");

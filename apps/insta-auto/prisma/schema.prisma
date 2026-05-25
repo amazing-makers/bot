@@ -153,6 +153,9 @@ model InstagramPost {
     /** 실패 메시지 */
     error       String? @db.Text
     creditsUsed Int?
+    /** 발행 시도 횟수 (재시도/디버깅 가시성) */
+    attemptCount  Int       @default(0)
+    lastAttemptAt DateTime?
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt

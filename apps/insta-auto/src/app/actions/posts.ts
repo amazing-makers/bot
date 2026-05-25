@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { publishPostNow } from '@/lib/publish';
+import { publishPostNow, validateImageUrl } from '@/lib/publish';
 
 async function requireUserId(): Promise<string> {
     const session = await auth();
@@ -33,7 +33,8 @@ export async function createPostAction(input: CreatePostInput) {
         return { ok: false as const, error: `caption 한도 ${IG_CAPTION_LIMIT}자 초과 (현재 ${caption.length}자)` };
     }
     const imageUrl = (input.imageUrl || '').trim() || null;
-    if (!imageUrl) return { ok: false as const, error: '이미지 URL 이 필요합니다 (public URL)' };
+    const imgErr = validateImageUrl(imageUrl);
+    if (imgErr) return { ok: false as const, error: imgErr };
 
     // 계정 소유 확인
     const account = await prisma.instagramAccount.findFirst({

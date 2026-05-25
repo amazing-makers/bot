@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { getBalance } from '@/lib/credit';
 import { listAccounts } from '@/lib/instagram-account';
+import { PostActions } from '@/components/PostActions';
 import {
     AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box, Anchor, Paper,
 } from '@mantine/core';
@@ -146,20 +147,23 @@ export default async function DashboardPage() {
                                                             <Text size="sm" lineClamp={1}>{p.caption}</Text>
                                                             {p.error && <Text size="11px" c="red" lineClamp={1}>⚠ {p.error}</Text>}
                                                         </Box>
-                                                        {p.permalink && (
-                                                            <Button
-                                                                component="a"
-                                                                href={p.permalink}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                size="xs"
-                                                                variant="subtle"
-                                                                color="grape"
-                                                                leftSection={<IconExternalLink size={12} />}
-                                                            >
-                                                                보기
-                                                            </Button>
-                                                        )}
+                                                        <Group gap="xs" wrap="nowrap">
+                                                            <PostActions postId={p.id} status={p.status} />
+                                                            {p.permalink && (
+                                                                <Button
+                                                                    component="a"
+                                                                    href={p.permalink}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    size="xs"
+                                                                    variant="subtle"
+                                                                    color="grape"
+                                                                    leftSection={<IconExternalLink size={12} />}
+                                                                >
+                                                                    보기
+                                                                </Button>
+                                                            )}
+                                                        </Group>
                                                     </Group>
                                                 </Paper>
                                             );
