@@ -1,0 +1,164 @@
+// 인스타봇 (instaauto) Prisma schema
+//
+// 전략: 마케팅봇·pdpbot 과 같은 DATABASE_URL → 같은 Supabase DB.
+// User / UserCredit / CreditTransaction 등 공유 테이블은 다른 봇과 동일하게 정의 (마케팅봇 source-of-truth).
+// 인스타봇 전용 테이블은 prefix 없이 별도 (InstagramAccount, InstagramPost).
+//
+// ⚠️ 새 테이블 추가는 공유 DB 에 대한 마이그레이션 — 운영 DB 백업 후 `npx prisma db push` 는 사용자 액션.
+//    (이 스캐폴드는 schema 정의까지만. 실제 push/migrate 는 SETUP.md 참조.)
+
+generator client {
+    provider = "prisma-client-js"
+    output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    // url 은 prisma.config.ts 에서 설정 (Prisma 7). 런타임은 src/lib/prisma.ts 의 PrismaPg adapter.
+}
+
+// ===== 공유 모델 (다른 봇과 같은 테이블) =====
+
+enum UserRole {
+    USER
+    ADMIN
+}
+
+model User {
+    id                    String    @id @default(cuid())
+    email                 String    @unique
+    password              String
+    name                  String?
+    role                  UserRole  @default(USER)
+    onboardingCompletedAt DateTime?
+    createdAt             DateTime  @default(now())
+    updatedAt             DateTime  @updatedAt
+
+    currentWorkspaceId String?
+
+    // 인스타봇 관계
+    instagramAccounts InstagramAccount[]
+    instagramPosts    InstagramPost[]
+    credits           UserCredit?
+
+    @@map("User")
+}
+
+// 통합 크레딧 잔액 (모든 봇 공유).
+model UserCredit {
+    id        String   @id @default(cuid())
+    userId    String   @unique
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    balance   Int      @default(0)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    transactions CreditTransaction[]
+
+    @@map("UserCredit")
+}
+
+// 모든 크레딧 변동 이력 (audit log).
+model CreditTransaction {
+    id           String     @id @default(cuid())
+    userCreditId String
+    userCredit   UserCredit @relation(fields: [userCreditId], references: [id], onDelete: Cascade)
+    delta        Int
+    balanceAfter Int
+    bot          String? // 'instaauto' | 'marketingbot' | 'pdpbot' 등
+    action       String // 'PUBLISH' | 'PURCHASE' | 'REFUND' 등
+    refType      String?
+    refId        String?
+    metadata     Json?
+    createdAt    DateTime   @default(now())
+
+    @@index([userCreditId, createdAt])
+    @@index([bot, createdAt])
+    @@map("CreditTransaction")
+}
+
+// ===== 인스타봇 전용 모델 =====
+
+enum InstagramAccountStatus {
+    ACTIVE // 토큰 유효, 발행 가능
+    PENDING_AUTH // 토큰 만료/누락 — 재연결 필요
+    ERROR // 검증 실패
+}
+
+// 연결된 인스타그램 Business/Creator 계정.
+//
+// 발행은 Instagram Graph API (HTTP) 로 직접 — 데스크톱 에이전트 불필요.
+// 전제: Business/Creator 계정 + Facebook Page 연결 (개인 계정 ❌).
+model InstagramAccount {
+    id       String @id @default(cuid())
+    userId   String
+    user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    /** Instagram Business Account ID (Graph API 식별자) */
+    igUserId String
+    /** @username (표시용) */
+    username String
+    /** 팔로워 수 (검증 시점 스냅샷) */
+    followers Int?
+    /** Long-lived Page Access Token — AES-256-GCM 암호화 (형식: iv:ct:tag hex) */
+    encryptedAccessToken String                 @db.Text
+    /** 토큰 만료 추정 시각 (long-lived 60일) */
+    tokenExpiresAt       DateTime?
+    status               InstagramAccountStatus @default(ACTIVE)
+    createdAt            DateTime               @default(now())
+    updatedAt            DateTime               @updatedAt
+
+    posts InstagramPost[]
+
+    @@unique([userId, igUserId])
+    @@index([userId])
+    @@map("InstagramAccount")
+}
+
+enum InstagramPostStatus {
+    DRAFT // 작성 중
+    SCHEDULED // 예약됨 (scheduledAt 도래 시 발행)
+    PUBLISHING // 발행 진행 중 (container 생성~publish)
+    PUBLISHED // 발행 완료
+    FAILED // 발행 실패 (error 참조)
+}
+
+enum InstagramMediaType {
+    IMAGE
+    REELS
+}
+
+// 인스타 게시물 (초안 → 예약/즉시 발행).
+model InstagramPost {
+    id        String           @id @default(cuid())
+    userId    String
+    user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+    accountId String
+    account   InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+    /** 본문 (한도 2200자, 해시태그 ≤30) */
+    caption  String             @db.Text
+    /** public 이미지 URL (Graph API 가 fetch — localhost ❌) */
+    imageUrl String?
+    /** public 비디오 URL (.mp4, REELS) */
+    videoUrl String?
+    mediaType InstagramMediaType @default(IMAGE)
+
+    status      InstagramPostStatus @default(DRAFT)
+    scheduledAt DateTime?
+    publishedAt DateTime?
+
+    /** 발행 성공 시 IG media id */
+    mediaId   String?
+    permalink String?
+    /** 실패 메시지 */
+    error       String? @db.Text
+    creditsUsed Int?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([userId, createdAt])
+    @@index([accountId, status])
+    @@index([status, scheduledAt])
+    @@map("InstagramPost")
+}
