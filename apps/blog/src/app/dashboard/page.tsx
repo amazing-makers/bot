@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { getBalance } from '@/lib/credit';
 import { listAccounts } from '@/lib/blog-account';
 import {
-    AppShell, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box, Anchor, Paper,
+    AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box, Anchor, Paper,
 } from '@mantine/core';
 import { IconArticle, IconPlus, IconCoin, IconWorldWww, IconExternalLink } from '@tabler/icons-react';
 
@@ -39,7 +39,7 @@ export default async function DashboardPage() {
 
     return (
         <AppShell header={{ height: 60 }} padding="md">
-            <AppShell.Header>
+            <AppShellHeader>
                 <Container size="xl" h="100%">
                     <Group h="100%" justify="space-between">
                         <Group gap="xs">
@@ -61,9 +61,9 @@ export default async function DashboardPage() {
                         </Group>
                     </Group>
                 </Container>
-            </AppShell.Header>
+            </AppShellHeader>
 
-            <AppShell.Main>
+            <AppShellMain>
                 <Container size="xl">
                     <Group justify="space-between" mb="lg">
                         <Stack gap={2}>
@@ -170,7 +170,7 @@ export default async function DashboardPage() {
                         </Stack>
                     )}
                 </Container>
-            </AppShell.Main>
+            </AppShellMain>
         </AppShell>
     );
 }

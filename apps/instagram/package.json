@@ -8,7 +8,8 @@
     "start": "next start -p 3500",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
-    "seed:credits": "tsx scripts/seed-credits.ts"
+    "seed:credits": "tsx scripts/seed-credits.ts",
+    "seed:user": "tsx scripts/seed-user.ts"
   },
   "dependencies": {
     "@amakers/auth": "*",

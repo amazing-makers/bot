@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { listAccounts } from '@/lib/blog-account';
-import { AppShell, Container, Title, Text, Group, ThemeIcon, Anchor, Button, Alert } from '@mantine/core';
+import { AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Group, ThemeIcon, Anchor, Button, Alert } from '@mantine/core';
 import { IconArticle, IconArrowLeft, IconInfoCircle } from '@tabler/icons-react';
 import { ComposeForm } from '@/components/ComposeForm';
 
@@ -19,7 +19,7 @@ export default async function ComposePage() {
 
     return (
         <AppShell header={{ height: 60 }} padding="md">
-            <AppShell.Header>
+            <AppShellHeader>
                 <Container size="md" h="100%">
                     <Group h="100%" justify="space-between">
                         <Group gap="xs">
@@ -35,9 +35,9 @@ export default async function ComposePage() {
                         </Button>
                     </Group>
                 </Container>
-            </AppShell.Header>
+            </AppShellHeader>
 
-            <AppShell.Main>
+            <AppShellMain>
                 <Container size="md">
                     <Title order={2} mb={4}>새 글 작성</Title>
                     <Text c="dimmed" size="sm" mb="lg">제목 + 본문(HTML/텍스트)으로 즉시 발행하거나 예약합니다.</Text>
@@ -49,7 +49,7 @@ export default async function ComposePage() {
                         <ComposeForm accounts={options} />
                     )}
                 </Container>
-            </AppShell.Main>
+            </AppShellMain>
         </AppShell>
     );
 }

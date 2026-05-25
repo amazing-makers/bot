@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { listAccounts } from '@/lib/instagram-account';
-import { AppShell, Container, Title, Text, Group, ThemeIcon, Anchor, Button, Alert } from '@mantine/core';
+import { AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Group, ThemeIcon, Anchor, Button, Alert } from '@mantine/core';
 import { IconBrandInstagram, IconArrowLeft, IconInfoCircle } from '@tabler/icons-react';
 import { ComposeForm } from '@/components/ComposeForm';
 
@@ -19,7 +19,7 @@ export default async function ComposePage() {
 
     return (
         <AppShell header={{ height: 60 }} padding="md">
-            <AppShell.Header>
+            <AppShellHeader>
                 <Container size="sm" h="100%">
                     <Group h="100%" justify="space-between">
                         <Group gap="xs">
@@ -35,9 +35,9 @@ export default async function ComposePage() {
                         </Button>
                     </Group>
                 </Container>
-            </AppShell.Header>
+            </AppShellHeader>
 
-            <AppShell.Main>
+            <AppShellMain>
                 <Container size="sm">
                     <Title order={2} mb={4}>새 게시물</Title>
                     <Text c="dimmed" size="sm" mb="lg">캡션 + public 이미지 URL 로 즉시 발행하거나 예약합니다.</Text>
@@ -49,7 +49,7 @@ export default async function ComposePage() {
                         <ComposeForm accounts={options} />
                     )}
                 </Container>
-            </AppShell.Main>
+            </AppShellMain>
         </AppShell>
     );
 }

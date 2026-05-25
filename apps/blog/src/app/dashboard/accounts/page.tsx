@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { listAccounts } from '@/lib/blog-account';
-import { AppShell, Container, Title, Text, Group, ThemeIcon, Anchor, Button } from '@mantine/core';
+import { AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Group, ThemeIcon, Anchor, Button } from '@mantine/core';
 import { IconArticle, IconArrowLeft } from '@tabler/icons-react';
 import { AccountsManager } from '@/components/AccountsManager';
 
@@ -16,7 +16,7 @@ export default async function AccountsPage() {
 
     return (
         <AppShell header={{ height: 60 }} padding="md">
-            <AppShell.Header>
+            <AppShellHeader>
                 <Container size="md" h="100%">
                     <Group h="100%" justify="space-between">
                         <Group gap="xs">
@@ -32,9 +32,9 @@ export default async function AccountsPage() {
                         </Button>
                     </Group>
                 </Container>
-            </AppShell.Header>
+            </AppShellHeader>
 
-            <AppShell.Main>
+            <AppShellMain>
                 <Container size="md">
                     <Title order={2} mb={4}>블로그 연결</Title>
                     <Text c="dimmed" size="sm" mb="lg">
@@ -42,7 +42,7 @@ export default async function AccountsPage() {
                     </Text>
                     <AccountsManager initialAccounts={accounts} />
                 </Container>
-            </AppShell.Main>
+            </AppShellMain>
         </AppShell>
     );
 }
