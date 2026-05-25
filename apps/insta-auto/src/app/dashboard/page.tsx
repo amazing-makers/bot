@@ -9,7 +9,7 @@ import {
     AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box, Anchor, Paper,
 } from '@mantine/core';
 import {
-    IconBrandInstagram, IconPlus, IconCoin, IconUserPlus, IconPhoto, IconExternalLink,
+    IconBrandInstagram, IconPlus, IconCoin, IconUserPlus, IconExternalLink, IconCalendarEvent,
 } from '@tabler/icons-react';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +55,9 @@ export default async function DashboardPage() {
                             <Badge variant="light" color="grape" size="lg" leftSection={<IconCoin size={14} />}>
                                 {balance.toLocaleString()} credits
                             </Badge>
+                            <Button component="a" href="/dashboard/calendar" size="xs" variant="subtle" color="grape" leftSection={<IconCalendarEvent size={14} />}>
+                                달력
+                            </Button>
                             <Button component="a" href="/dashboard/accounts" size="xs" variant="subtle" color="grape" leftSection={<IconUserPlus size={14} />}>
                                 계정
                             </Button>

@@ -7,7 +7,7 @@ import { ComposeForm } from '@/components/ComposeForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ComposePage() {
+export default async function ComposePage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
     const session = await auth();
     const userId = (session?.user as any)?.id;
     if (!userId) redirect('/login?callbackUrl=/dashboard/compose');
@@ -17,10 +17,14 @@ export default async function ComposePage() {
         .filter((a) => a.status === 'ACTIVE')
         .map((a) => ({ value: a.id, label: `@${a.username}` }));
 
+    const sp = await searchParams;
+    // 달력에서 날짜 클릭 → 그 날 09:00 으로 예약 프리필
+    const initialScheduledAt = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? `${sp.date}T09:00` : undefined;
+
     return (
         <AppShell header={{ height: 60 }} padding="md">
             <AppShellHeader>
-                <Container size="sm" h="100%">
+                <Container size="lg" h="100%">
                     <Group h="100%" justify="space-between">
                         <Group gap="xs">
                             <ThemeIcon variant="gradient" gradient={{ from: 'grape', to: 'orange' }} size="lg" radius="md">
@@ -38,15 +42,15 @@ export default async function ComposePage() {
             </AppShellHeader>
 
             <AppShellMain>
-                <Container size="sm">
+                <Container size="lg">
                     <Title order={2} mb={4}>새 게시물</Title>
-                    <Text c="dimmed" size="sm" mb="lg">캡션 + public 이미지 URL 로 즉시 발행하거나 예약합니다.</Text>
+                    <Text c="dimmed" size="sm" mb="lg">AI 이미지 생성 · 실시간 미리보기 · 최적 시간 예약</Text>
                     {options.length === 0 ? (
                         <Alert color="grape" variant="light" icon={<IconInfoCircle size={16} />}>
                             먼저 활성 인스타 계정을 연결하세요. <Anchor component="a" href="/dashboard/accounts">계정 연결 ↗</Anchor>
                         </Alert>
                     ) : (
-                        <ComposeForm accounts={options} />
+                        <ComposeForm accounts={options} initialScheduledAt={initialScheduledAt} />
                     )}
                 </Container>
             </AppShellMain>
