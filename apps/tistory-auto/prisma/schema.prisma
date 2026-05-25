@@ -33,9 +33,10 @@ model User {
 
     currentWorkspaceId String?
 
-    tistoryAccounts TistoryAccount[]
-    tistoryPosts    TistoryPost[]
-    credits         UserCredit?
+    tistoryAccounts   TistoryAccount[]
+    tistoryPosts      TistoryPost[]
+    tistoryAgentTokens TistoryAgentToken[]
+    credits           UserCredit?
 
     @@map("User")
 }
@@ -82,7 +83,8 @@ enum TistoryAccountStatus {
 enum TistoryPostStatus {
     DRAFT
     SCHEDULED
-    PUBLISHING
+    QUEUED // 에이전트 발행 대기 (큐 적재됨)
+    PUBLISHING // 에이전트가 발행 진행 중
     PUBLISHED
     FAILED
 }
@@ -140,4 +142,20 @@ model TistoryPost {
     @@index([accountId, status])
     @@index([status, scheduledAt])
     @@map("TistoryPost")
+}
+
+// 데스크톱 에이전트 인증 토큰 (poll/complete API Bearer).
+// 사용자가 발급 → 에이전트 설정에 입력 → 에이전트가 이 토큰으로 큐를 폴링.
+model TistoryAgentToken {
+    id         String    @id @default(cuid())
+    userId     String
+    user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    /** 32바이트 hex 랜덤 토큰 (Bearer) */
+    token      String    @unique
+    label      String?
+    lastUsedAt DateTime?
+    createdAt  DateTime  @default(now())
+
+    @@index([userId])
+    @@map("TistoryAgentToken")
 }

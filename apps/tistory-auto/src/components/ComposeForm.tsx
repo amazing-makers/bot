@@ -40,8 +40,8 @@ export function ComposeForm({ accounts }: { accounts: { value: string; label: st
                 return;
             }
             notifications.show({
-                title: publishNow ? '발행 완료' : schedule ? '예약 완료' : '초안 저장',
-                message: publishNow ? '티스토리에 게시되었습니다.' : '대시보드에서 확인하세요.',
+                title: publishNow ? '발행 큐 추가' : schedule ? '예약 완료' : '초안 저장',
+                message: publishNow ? '데스크톱 에이전트가 발행을 처리합니다 (대시보드에서 상태 확인).' : '대시보드에서 확인하세요.',
                 color: 'teal',
             });
             router.push('/dashboard');

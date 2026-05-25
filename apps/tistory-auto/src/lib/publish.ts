@@ -1,30 +1,32 @@
 /**
- * 발행 오케스트레이션 — 티스토리는 Phase 2(에이전트)라 현재는 발행 불가, 초안/예약 저장만.
+ * 발행 오케스트레이션 — 티스토리는 데스크톱 에이전트가 실제 발행.
+ *
+ * 흐름: 발행 누름 → 글을 QUEUED 로 적재 → 에이전트가 /api/agent/poll 로 가져가 발행 →
+ *       /api/agent/complete 로 결과 보고(PUBLISHED/FAILED).
  */
 
 import { prisma } from './prisma';
-import { TISTORY_AGENT_PENDING_MESSAGE } from './publishers/tistory';
 
 export interface PublishOutcome {
     ok: boolean;
-    remotePostId?: string;
-    link?: string;
+    queued?: boolean;
     error?: string;
 }
 
-/**
- * 즉시 발행 시도. 현재 티스토리 자동 발행 미지원(에이전트 Phase 2) → 명확히 안내.
- * 글은 보존되며(초안), 에이전트 출시 후 발행 가능.
- */
+/** 발행 요청 = 에이전트 큐에 적재(QUEUED). 실제 발행은 에이전트가 처리. */
 export async function publishPostNow(userId: string, postId: string): Promise<PublishOutcome> {
     const post = await prisma.tistoryPost.findFirst({ where: { id: postId, userId } });
     if (!post) return { ok: false, error: '글을 찾을 수 없습니다' };
+    if (post.status === 'PUBLISHED') return { ok: false, error: '이미 발행된 글입니다' };
 
-    // 발행 시도 기록만 남기고 DRAFT 유지 (데이터 손실 없음).
     await prisma.tistoryPost.update({
         where: { id: post.id },
-        data: { error: TISTORY_AGENT_PENDING_MESSAGE },
+        data: { status: 'QUEUED', error: null },
     });
 
-    return { ok: false, error: TISTORY_AGENT_PENDING_MESSAGE };
+    return {
+        ok: true,
+        queued: true,
+        error: undefined,
+    };
 }

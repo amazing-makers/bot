@@ -58,6 +58,9 @@ export default async function DashboardPage() {
                             <Button component="a" href="/dashboard/accounts" size="xs" variant="subtle" color="orange" leftSection={<IconWorldWww size={14} />}>
                                 블로그
                             </Button>
+                            <Button component="a" href="/dashboard/agent" size="xs" variant="subtle" color="orange" leftSection={<IconRobot size={14} />}>
+                                에이전트
+                            </Button>
                             <Text size="sm" c="dimmed">{session?.user?.email}</Text>
                         </Group>
                     </Group>
@@ -83,8 +86,8 @@ export default async function DashboardPage() {
 
                     <Alert color="orange" variant="light" icon={<IconRobot size={16} />} mb="lg">
                         <Text size="sm">
-                            티스토리는 공개 발행 API가 없어, <strong>자동 발행은 데스크톱 에이전트 연동(Phase 2)</strong> 후 활성화됩니다.
-                            현재는 블로그 등록 + 글 작성·예약(초안)까지 지원합니다.
+                            발행을 누르면 글이 <strong>큐(QUEUED)에 적재</strong>되고, 연결된 <strong>데스크톱 에이전트</strong>가 티스토리에 발행합니다 (공개 API 부재).
+                            토큰·연동은 상단 <strong>에이전트</strong> 메뉴 참조. 에이전트 미실행 시 글은 큐에서 대기합니다.
                         </Text>
                     </Alert>
 
