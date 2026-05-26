@@ -8,7 +8,7 @@
 | 앱 | Root Directory | 도메인 | Vercel 프로젝트명(권장) |
 |---|---|---|---|
 | 인스타오토 | `apps/insta-auto` | instaauto.amakers.co.kr | instaauto |
-| 블로그오토 | `apps/blog-auto` | blogauto.amakers.co.kr | blogauto |
+| 네이버블로그오토 | `apps/blog-auto` | naverblogauto.amakers.co.kr | naverblogauto |
 | 티스토리오토 | `apps/tistory-auto` | tistoryauto.amakers.co.kr | tistoryauto |
 
 > ⛔ `amakers.co.kr` / `www` (아임웹) · MX(이메일)는 **건드리지 말 것.**
@@ -29,7 +29,7 @@ Cloudflare → amakers.co.kr → DNS → Add record:
 | Type | Name | Target | Proxy |
 |---|---|---|---|
 | CNAME | `instaauto` | `cname.vercel-dns.com` | **DNS only (회색 구름)** |
-| CNAME | `blogauto` | `cname.vercel-dns.com` | DNS only |
+| CNAME | `naverblogauto` | `cname.vercel-dns.com` | DNS only |
 | CNAME | `tistoryauto` | `cname.vercel-dns.com` | DNS only |
 
 ## 3. Vercel 프로젝트 (앱마다 반복)
@@ -44,7 +44,7 @@ Cloudflare → amakers.co.kr → DNS → Add record:
 ### 4-1. 환경변수 (모든 앱 공통)
 ```
 DATABASE_URL      = <공유 Supabase/Neon Session pooler URL>   # 모든 봇 동일
-NEXTAUTH_SECRET   = <openssl rand -base64 32>                  # 봇별 달라도 됨(단독 로그인). SSO 통합하려면 동일
+NEXTAUTH_SECRET   = <openssl rand -base64 32>                  # ⚠️ SSO 하려면 3개 앱 모두 동일 값 (4-2 참조)
 NEXTAUTH_URL      = https://instaauto.amakers.co.kr            # 각 앱 자기 도메인
 ENCRYPTION_KEY    = <openssl rand -hex 32>                     # 토큰/키 암호화. ⚠️ 한 번 정하면 변경 금지(기존 암호문 복호화 불가)
 CRON_SECRET       = <openssl rand -hex 16>                     # 예약 자동발행 cron 보호 (insta/blog)
@@ -52,6 +52,30 @@ CRON_SECRET       = <openssl rand -hex 16>                     # 예약 자동�
 - insta/blog 는 `vercel.json` 에 cron(매 5분)이 있어 CRON_SECRET 설정 시 Vercel 이 자동 호출.
 - 인스타 Facebook OAuth 쓰면(아래 6): `META_APP_ID`, `META_APP_SECRET` 추가.
 - R2 이미지 업로드 쓰면(아래 5): `R2_*` 5개 추가.
+
+### 4-2. SSO — 한 번 로그인하면 3개 오토 전부 로그인 (pchahub 방식)
+
+코드는 **이미 SSO 지원** (`src/auth.config.ts` — `NEXTAUTH_URL` 이 `amakers.co.kr` 이면 세션 쿠키를
+`.amakers.co.kr` 도메인 + 동일 이름 `__Secure-authjs.session-token` 으로 발급). **코드 수정 불필요** —
+아래 3가지를 맞추기만 하면 됨:
+
+| 환경변수 | 3개 앱 모두 | 이유 |
+|---|---|---|
+| `NEXTAUTH_SECRET` | **완전히 동일** | JWT 세션을 같은 키로 서명/검증 → A앱 쿠키를 B앱이 그대로 인정 |
+| `DATABASE_URL` | **완전히 동일** | 같은 `User` 테이블 = 같은 계정·비번·크레딧 잔액 공유 |
+| `ENCRYPTION_KEY` | 동일 권장 | 한 곳에서 저장한 토큰/키를 다른 곳에서도 복호화하려면 동일해야 |
+| `NEXTAUTH_URL` | **앱마다 다름** | 각자 자기 도메인 (`https://instaauto.amakers.co.kr` 등) |
+
+**필수 조건 — 셋 다 `amakers.co.kr` 서브도메인이어야 함.**
+`*.vercel.app` 기본 주소로 두면 도메인이 서로 달라 쿠키 공유 불가 → SSO 안 됨.
+반드시 위 2번(Cloudflare DNS) + Vercel Domains 로 `instaauto/naverblogauto/tistoryauto.amakers.co.kr` 연결.
+
+동작: `instaauto.amakers.co.kr` 에서 로그인 → 쿠키가 `.amakers.co.kr` 전체에 적용 →
+`naverblogauto`·`tistoryauto` 새로고침하면 이미 로그인된 상태. (로그아웃도 공유)
+
+> **pcha(amakers.co.kr) 합류**: pcha 도 같은 SSO 에 넣으려면 pcha 가 ① 같은 `NEXTAUTH_SECRET`
+> ② 같은 `User` 테이블(DB) ③ 같은 쿠키 이름/도메인 설정을 써야 함. pcha 는 운영 중이라
+> 별도 검토 필요 — 오토 3종끼리 먼저 SSO 묶고, pcha 통합은 그다음 단계 권장.
 
 ---
 
