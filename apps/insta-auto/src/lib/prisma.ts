@@ -5,6 +5,9 @@
  *   - globalThis 캐시 (HMR 중복 생성 방지)
  *   - pg.Pool max=1 (서버리스 함수 1 인스턴스당 1 connection)
  *   - 모든 봇이 같은 한도 공유.
+ *
+ * ⚠️ 지연 초기화(lazy): 모듈 import 시점이 아니라 첫 사용(쿼리) 시점에 클라이언트 생성.
+ *    Next.js 빌드의 page-data 수집 단계에서 DATABASE_URL 없이도 통과하도록 — 런타임에만 필요.
  */
 
 // 커스텀 output(generator output = ../node_modules/.prisma/client) 으로 생성된 클라이언트를 직접 import.
@@ -30,8 +33,18 @@ function createClient(): PrismaClient {
     return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
-
-if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = prisma;
+function getClient(): PrismaClient {
+    if (!globalForPrisma.prisma) {
+        globalForPrisma.prisma = createClient();
+    }
+    return globalForPrisma.prisma;
 }
+
+// 지연 프록시: 실제 접근(prisma.user.findMany 등) 시점에만 createClient() 호출.
+export const prisma = new Proxy({} as PrismaClient, {
+    get(_target, prop) {
+        const client = getClient();
+        const value = (client as any)[prop];
+        return typeof value === 'function' ? value.bind(client) : value;
+    },
+});

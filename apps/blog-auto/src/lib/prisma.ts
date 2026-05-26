@@ -27,8 +27,19 @@ function createClient(): PrismaClient {
     return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
-
-if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = prisma;
+function getClient(): PrismaClient {
+    if (!globalForPrisma.prisma) {
+        globalForPrisma.prisma = createClient();
+    }
+    return globalForPrisma.prisma;
 }
+
+// 지연 프록시: 모듈 import 가 아니라 첫 사용(쿼리) 시점에 createClient() 호출.
+// Next.js 빌드 page-data 수집 단계에서 DATABASE_URL 없이 통과 — 런타임에만 필요.
+export const prisma = new Proxy({} as PrismaClient, {
+    get(_target, prop) {
+        const client = getClient();
+        const value = (client as any)[prop];
+        return typeof value === 'function' ? value.bind(client) : value;
+    },
+});
