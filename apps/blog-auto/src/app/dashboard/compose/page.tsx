@@ -30,7 +30,7 @@ export default async function ComposePage({ searchParams }: { searchParams: Prom
                                 <IconArticle size={20} />
                             </ThemeIcon>
                             <Anchor component="a" href="/dashboard" underline="never" c="inherit">
-                                <Title order={3}>BlogAuto</Title>
+                                <Title order={3}>NaverBlogAuto</Title>
                             </Anchor>
                         </Group>
                         <Button component="a" href="/dashboard" variant="subtle" size="xs" leftSection={<IconArrowLeft size={14} />}>

@@ -21,7 +21,7 @@ export default async function LandingPage() {
                 <ThemeIcon variant="gradient" gradient={{ from: 'blue', to: 'cyan' }} size={72} radius="lg">
                     <IconArticle size={40} />
                 </ThemeIcon>
-                <Badge variant="light" color="blue" size="lg">amakers · BlogAuto</Badge>
+                <Badge variant="light" color="blue" size="lg">amakers · NaverBlogAuto</Badge>
                 <Title order={1} ta="center">블로그 자동화봇</Title>
                 <Text c="dimmed" ta="center" size="lg" maw={520}>
                     글 작성부터 예약·발행까지. 마케팅봇에서 분리한 블로그 전용 자동화 도구.

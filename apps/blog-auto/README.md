@@ -1,8 +1,8 @@
-# blogauto — 블로그 자동화봇
+# naverblogauto — 블로그 자동화봇
 
 마케팅봇에서 블로그 발행 기능을 떼어낸 **플랫폼 전용 자동화봇**. amakers 멀티봇 플랫폼의 한 앱(`apps/blog-auto`)으로 공통 인증·결제·DB 를 공유한다.
 
-- **도메인**: blogauto.amakers.co.kr (예정)
+- **도메인**: naverblogauto.amakers.co.kr (예정)
 - **패키지**: `@amakers/blog`
 - **dev 포트**: 3600
 
@@ -29,7 +29,7 @@ apps/blog-auto/
 │   ├── lib/
 │   │   ├── prisma.ts            # pg.Pool max=1
 │   │   ├── crypto.ts            # AES-256-GCM (ENCRYPTION_KEY)
-│   │   ├── credit.ts            # 통합 크레딧 (bot=blogauto)
+│   │   ├── credit.ts            # 통합 크레딧 (bot=naverblogauto)
 │   │   ├── blog-account.ts      # 계정 연결/검증/복호화
 │   │   ├── publish.ts           # 발행 오케스트레이션
 │   │   └── publishers/wordpress.ts  # WordPress REST (마케팅봇에서 이식)

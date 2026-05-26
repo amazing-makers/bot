@@ -31,12 +31,12 @@
 | 상세페이지봇 | pdp | pdpbot.amakers.co.kr (예정) | apps/pdp | @amakers/pdp | pdpbot (예정) | 🆕 scaffold 완료 |
 | 디자인봇 | design | designbot.amakers.co.kr (예정) | apps/design | @amakers/design | designbot (예정) | 📝 README만 |
 | 모형봇 | mockup | mockupbot.amakers.co.kr (예정) | apps/mockup | @amakers/mockup | mockupbot (예정) | 📝 미시작 |
-| 인스타오토 | insta-auto | instaauto.amakers.co.kr (예정) | apps/insta-auto | @amakers/insta-auto | instaauto (예정) | 🆕 scaffold (마케팅봇 IG 분리) |
-| 블로그오토 | blog-auto | blogauto.amakers.co.kr (예정) | apps/blog-auto | @amakers/blog-auto | blogauto (예정) | 🆕 scaffold (WordPress; 네이버=Phase2) |
-| 티스토리오토 | tistory-auto | tistoryauto.amakers.co.kr (예정) | apps/tistory-auto | @amakers/tistory-auto | tistoryauto (예정) | 🆕 scaffold (발행=에이전트 Phase2) |
+| 인스타오토 | insta-auto | instaauto.amakers.co.kr (예정) | apps/insta-auto | @amakers/insta-auto | instaauto | 🆕 scaffold (마케팅봇 IG 분리) |
+| 네이버블로그오토 | blog-auto | naverblogauto.amakers.co.kr (예정) | apps/blog-auto | @amakers/blog-auto | naverblogauto | ✅ Vercel 배포 (WordPress; 네이버=Phase2) |
+| 티스토리오토 | tistory-auto | tistoryauto.amakers.co.kr (예정) | apps/tistory-auto | @amakers/tistory-auto | tistoryauto | 🆕 scaffold (발행=에이전트 Phase2) |
 
 > ℹ️ 인스타오토·블로그오토은 "마케팅봇"을 **플랫폼별**(인스타·블로그·티스토리)로 쪼개는 새 분할 축.
-> 영문 풀 호칭은 한 단어 컨벤션상 `instaauto`/`blogauto`, 디렉토리·패키지는 `insta-auto`/`blog-auto`.
+> 영문 풀 호칭은 한 단어 컨벤션상 `instaauto`/`naverblogauto`, 디렉토리·패키지는 `insta-auto`/`blog-auto` (디렉토리는 분할 축 이름 유지, Vercel 프로젝트명만 `naverblogauto`).
 > 블로그오토 Phase1 은 WordPress(HTTP)만; 네이버블로그는 에이전트 필요(Phase2), 티스토리는 별도 봇.
 
 ---

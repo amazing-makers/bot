@@ -1,5 +1,5 @@
 /**
- * Prisma client — blogauto 전용 (다른 봇과 같은 DB).
+ * Prisma client — naverblogauto 전용 (다른 봇과 같은 DB).
  *
  * 커스텀 output 으로 생성된 클라이언트를 직접 import (모노레포 hoisting 시 @prisma/client 가
  * 앱 로컬 .prisma/client 를 못 찾는 문제 회피).

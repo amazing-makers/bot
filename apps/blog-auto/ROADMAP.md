@@ -1,4 +1,4 @@
-# blogauto ROADMAP
+# naverblogauto ROADMAP
 
 마케팅봇의 블로그 발행 기능을 독립 봇으로 분리 → 점진적 고도화.
 

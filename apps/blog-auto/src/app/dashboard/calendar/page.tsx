@@ -36,7 +36,7 @@ export default async function CalendarPage() {
                                 <IconArticle size={20} />
                             </ThemeIcon>
                             <Anchor component="a" href="/dashboard" underline="never" c="inherit">
-                                <Title order={3}>BlogAuto</Title>
+                                <Title order={3}>NaverBlogAuto</Title>
                             </Anchor>
                         </Group>
                         <Group gap="xs">

@@ -5,7 +5,7 @@ import { authConfig } from './auth.config';
 import { prisma } from './lib/prisma';
 
 /**
- * blogauto NextAuth — 다른 봇과 같은 User 테이블 + 같은 bcrypt 해시 + 같은 NEXTAUTH_SECRET (SSO).
+ * naverblogauto NextAuth — 다른 봇과 같은 User 테이블 + 같은 bcrypt 해시 + 같은 NEXTAUTH_SECRET (SSO).
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig,

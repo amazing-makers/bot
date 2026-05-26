@@ -51,7 +51,7 @@ async function executePublish(post: PostRow, creds: WordPressCredentials): Promi
 
         const spend = await spendCredits(post.userId, {
             amount: CREDIT_RATES.PUBLISH,
-            bot: 'blogauto',
+            bot: 'naverblogauto',
             action: 'PUBLISH',
             refType: 'BlogPost',
             refId: post.id,

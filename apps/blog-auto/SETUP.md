@@ -1,4 +1,4 @@
-# blogauto 셋업
+# naverblogauto 셋업
 
 ## 1. 환경변수
 
@@ -41,7 +41,7 @@ npm run dev:blog-auto        # http://localhost:3600
 
 ## 5. Vercel 배포 (추후)
 
-- 새 프로젝트 `blogauto`, Root Directory: `apps/blog-auto`
+- 새 프로젝트 `naverblogauto`, Root Directory: `apps/blog-auto`
 - Build: `cd ../.. && npm run build:blog-auto`, Install: `cd ../.. && npm install`
-- 환경변수 + `NEXTAUTH_URL=https://blogauto.amakers.co.kr`
-- Cloudflare DNS: `blogauto.amakers.co.kr` CNAME → `cname.vercel-dns.com`
+- 환경변수 + `NEXTAUTH_URL=https://naverblogauto.amakers.co.kr`
+- Cloudflare DNS: `naverblogauto.amakers.co.kr` CNAME → `cname.vercel-dns.com`

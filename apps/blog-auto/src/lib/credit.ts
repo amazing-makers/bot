@@ -1,11 +1,11 @@
 /**
- * Credit billing helper — blogauto 발행이 이 헬퍼로 차감 (통합 잔액, 모든 봇 공유).
+ * Credit billing helper — naverblogauto 발행이 이 헬퍼로 차감 (통합 잔액, 모든 봇 공유).
  * 차감은 atomic transaction.
  */
 
 import { prisma } from './prisma';
 
-export type Bot = 'blogauto' | 'instabot' | 'marketingbot' | 'pdpbot' | 'designbot' | 'mockupbot' | 'adminbot';
+export type Bot = 'naverblogauto' | 'instabot' | 'marketingbot' | 'pdpbot' | 'designbot' | 'mockupbot' | 'adminbot';
 
 export type SpendAction = 'PUBLISH' | 'AI_WRITE' | 'PURCHASE' | 'REFUND';
 

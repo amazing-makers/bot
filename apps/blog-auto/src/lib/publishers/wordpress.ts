@@ -60,7 +60,7 @@ async function uploadImageToWordPress(
 ): Promise<{ id: number; sourceUrl: string }> {
     let bytes: Buffer;
     let mime = 'image/png';
-    let filename = `blogauto-${Date.now()}.png`;
+    let filename = `naverblogauto-${Date.now()}.png`;
 
     if (photoUrl.startsWith('data:')) {
         const match = photoUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -68,14 +68,14 @@ async function uploadImageToWordPress(
         mime = match[1];
         bytes = Buffer.from(match[2], 'base64');
         const ext = mime.split('/')[1] || 'png';
-        filename = `blogauto-${Date.now()}.${ext}`;
+        filename = `naverblogauto-${Date.now()}.${ext}`;
     } else if (photoUrl.startsWith('https://') || photoUrl.startsWith('http://')) {
         const r = await fetch(photoUrl, { signal: AbortSignal.timeout(60000) });
         if (!r.ok) throw new Error(`이미지 fetch 실패 ${r.status}`);
         bytes = Buffer.from(await r.arrayBuffer());
         mime = r.headers.get('content-type') || 'image/png';
         const ext = mime.split('/')[1] || 'png';
-        filename = `blogauto-${Date.now()}.${ext}`;
+        filename = `naverblogauto-${Date.now()}.${ext}`;
     } else {
         throw new Error('지원되지 않는 photoUrl 형식 (https / data:image 만)');
     }

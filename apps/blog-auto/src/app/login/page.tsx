@@ -37,7 +37,7 @@ function LoginInner() {
                 <ThemeIcon variant="gradient" gradient={{ from: 'blue', to: 'cyan' }} size={56} radius="md">
                     <IconArticle size={32} />
                 </ThemeIcon>
-                <Title order={2} ta="center">BlogAuto</Title>
+                <Title order={2} ta="center">NaverBlogAuto</Title>
                 <Text c="dimmed" ta="center" size="sm">
                     블로그 자동화봇 — 글 작성부터 예약·발행까지 한 번에.
                 </Text>

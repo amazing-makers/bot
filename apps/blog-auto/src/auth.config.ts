@@ -1,7 +1,7 @@
 import type { NextAuthConfig } from 'next-auth';
 
 /**
- * blogauto NextAuth 설정. SSO 쿠키 도메인 .amakers.co.kr (다른 봇과 같은 NEXTAUTH_SECRET).
+ * naverblogauto NextAuth 설정. SSO 쿠키 도메인 .amakers.co.kr (다른 봇과 같은 NEXTAUTH_SECRET).
  * localhost 에서는 도메인 비움.
  */
 export const authConfig: NextAuthConfig = {

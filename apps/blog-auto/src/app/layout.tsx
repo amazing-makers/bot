@@ -6,7 +6,7 @@ import { ColorSchemeScript, mantineHtmlProps, MantineProvider } from '@mantine/c
 import { Notifications } from '@mantine/notifications';
 
 export const metadata: Metadata = {
-    title: 'BlogAuto — 블로그 자동화',
+    title: 'NaverBlogAuto — 블로그 자동화',
     description: '글 작성부터 예약·발행까지, 블로그 마케팅 자동화봇.',
 };
 

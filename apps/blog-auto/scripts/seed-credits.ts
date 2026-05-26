@@ -39,7 +39,7 @@ async function main() {
                     userCreditId: credit.id,
                     delta: amount,
                     balanceAfter: credit.balance,
-                    bot: 'blogauto',
+                    bot: 'naverblogauto',
                     action: 'PURCHASE',
                     metadata: { source: 'seed-credits.ts', cli: true } as any,
                 },
