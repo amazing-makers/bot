@@ -39,9 +39,29 @@ model User {
     // 인스타봇 관계
     instagramAccounts InstagramAccount[]
     instagramPosts    InstagramPost[]
+    apiKeys           UserApiKey[]
     credits           UserCredit?
 
     @@map("User")
+}
+
+// BYOK — 사용자가 입력한 외부 AI 키 (AES-256-GCM 암호화). provider: 'gemini' | 'groq' 등.
+model UserApiKey {
+    id           String    @id @default(cuid())
+    userId       String
+    user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    provider     String
+    /** 암호화된 키 (iv:ct:tag hex) */
+    encryptedKey String    @db.Text
+    /** 표시용 마스킹 (예: AIza…b1c2) */
+    maskedHint   String
+    lastUsedAt   DateTime?
+    createdAt    DateTime  @default(now())
+    updatedAt    DateTime  @updatedAt
+
+    @@unique([userId, provider])
+    @@index([userId])
+    @@map("UserApiKey")
 }
 
 // 통합 크레딧 잔액 (모든 봇 공유).

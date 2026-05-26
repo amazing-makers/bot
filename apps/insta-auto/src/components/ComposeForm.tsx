@@ -4,14 +4,14 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Card, Stack, Select, Textarea, TextInput, Button, Group, Text, Image, Box, Switch, Alert, Divider,
-    SegmentedControl, Paper, Avatar, ActionIcon, Tooltip,
+    SegmentedControl, Paper, Avatar, Tooltip, Anchor,
 } from '@mantine/core';
 import {
-    IconSend, IconCalendarTime, IconAlertCircle, IconSparkles, IconClock, IconHash, IconBrandInstagram, IconHeart, IconMessageCircle,
+    IconSend, IconCalendarTime, IconAlertCircle, IconSparkles, IconClock, IconHash, IconBrandInstagram, IconHeart, IconMessageCircle, IconWand,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { createPostAction } from '@/app/actions/posts';
-import { generateImageAction } from '@/app/actions/ai';
+import { generateImageAction, generateCaptionAction } from '@/app/actions/ai';
 import { IMAGE_RATIOS, type ImageRatio } from '@/lib/ai/image-gen';
 import { suggestPrimeTime } from '@/lib/scheduling/prime-time';
 
@@ -44,6 +44,12 @@ export function ComposeForm({
     const [aiRatio, setAiRatio] = useState<ImageRatio>('square');
     const [aiPending, startAi] = useTransition();
 
+    // AI 캡션
+    const [capTopic, setCapTopic] = useState('');
+    const [capTone, setCapTone] = useState('friendly');
+    const [needKey, setNeedKey] = useState(false);
+    const [capPending, startCap] = useTransition();
+
     const hashtagCount = (caption.match(/#[^\s#]+/g) || []).length;
     const accountLabel = accounts.find((a) => a.value === accountId)?.label ?? '@account';
 
@@ -57,6 +63,21 @@ export function ComposeForm({
                 notifications.show({ title: 'AI 이미지 생성', message: '미리보기에 반영했습니다.', color: 'grape' });
             } else {
                 setErr(r.error || 'AI 이미지 생성 실패');
+            }
+        });
+    };
+
+    const genCaption = () => {
+        setErr(null); setNeedKey(false);
+        if (!capTopic.trim()) { setErr('캡션 주제를 입력하세요'); return; }
+        startCap(async () => {
+            const r = await generateCaptionAction(capTopic, capTone as any);
+            if (r.ok && r.caption) {
+                setCaption(r.caption);
+                notifications.show({ title: 'AI 캡션 생성', message: `${r.provider} 로 생성했습니다.`, color: 'grape' });
+            } else {
+                if ((r.error || '').includes('키가 없습니다')) setNeedKey(true);
+                setErr(r.error || 'AI 캡션 생성 실패');
             }
         });
     };
@@ -112,9 +133,27 @@ export function ComposeForm({
                         onChange={(e) => setImageUrl(e.currentTarget.value)}
                     />
 
+                    {/* AI 캡션 생성 (BYOK) */}
+                    <Paper withBorder p="sm" radius="md" bg="grape.0">
+                        <Group gap="xs" mb={6}><IconWand size={16} color="var(--mantine-color-grape-6)" /><Text size="sm" fw={700}>AI 캡션 생성</Text></Group>
+                        <Stack gap="xs">
+                            <TextInput placeholder="주제/키워드 예: 가을 신메뉴 라떼 출시" value={capTopic} onChange={(e) => setCapTopic(e.currentTarget.value)} />
+                            <Group gap="xs" justify="space-between">
+                                <SegmentedControl size="xs" value={capTone} onChange={setCapTone} data={[
+                                    { value: 'friendly', label: '친근' }, { value: 'professional', label: '전문' },
+                                    { value: 'witty', label: '위트' }, { value: 'sale', label: '판매' },
+                                ]} />
+                                <Button size="xs" color="grape" loading={capPending} leftSection={<IconWand size={14} />} onClick={genCaption}>캡션 생성</Button>
+                            </Group>
+                            {needKey && (
+                                <Text size="xs" c="red">무료 AI 키가 필요합니다 → <Anchor href="/dashboard/settings/ai" size="xs">AI 설정에서 등록</Anchor></Text>
+                            )}
+                        </Stack>
+                    </Paper>
+
                     <Textarea
                         label="캡션"
-                        placeholder="게시물 내용 + #해시태그"
+                        placeholder="게시물 내용 + #해시태그 (또는 위에서 AI 생성)"
                         autosize minRows={4} maxRows={12}
                         value={caption}
                         onChange={(e) => setCaption(e.currentTarget.value)}
