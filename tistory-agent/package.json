@@ -1,0 +1,19 @@
+{
+  "name": "tistory-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "티스토리오토 데스크톱 발행 에이전트 — 큐를 폴링해 카카오 세션으로 티스토리에 자동 발행",
+  "scripts": {
+    "login": "node agent.mjs login",
+    "start": "node agent.mjs start",
+    "once": "node agent.mjs once"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "playwright": "^1.49.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
