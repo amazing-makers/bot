@@ -9,7 +9,7 @@ import {
     ThemeIcon, Box, Anchor, Paper, Alert,
 } from '@mantine/core';
 import {
-    IconArticle, IconPlus, IconCoin, IconWorldWww, IconExternalLink, IconRobot,
+    IconArticle, IconPlus, IconCoin, IconWorldWww, IconExternalLink, IconRobot, IconCalendarEvent,
 } from '@tabler/icons-react';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +55,9 @@ export default async function DashboardPage() {
                             <Badge variant="light" color="orange" size="lg" leftSection={<IconCoin size={14} />}>
                                 {balance.toLocaleString()} credits
                             </Badge>
+                            <Button component="a" href="/dashboard/calendar" size="xs" variant="subtle" color="orange" leftSection={<IconCalendarEvent size={14} />}>
+                                달력
+                            </Button>
                             <Button component="a" href="/dashboard/accounts" size="xs" variant="subtle" color="orange" leftSection={<IconWorldWww size={14} />}>
                                 블로그
                             </Button>
