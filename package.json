@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "turbo run dev",
     "dev:admin": "npm run dev --workspace=@amakers/admin",
     "dev:marketing": "npm run dev --workspace=@amakers/marketing",
     "dev:pdp": "npm run dev --workspace=@amakers/pdp",
@@ -16,7 +17,7 @@
     "dev:insta-auto": "npm run dev --workspace=@amakers/insta-auto",
     "dev:blog-auto": "npm run dev --workspace=@amakers/blog-auto",
     "dev:tistory-auto": "npm run dev --workspace=@amakers/tistory-auto",
-    "build": "npm run build --workspaces --if-present",
+    "build": "turbo run build",
     "build:admin": "npm run build --workspace=@amakers/admin",
     "build:marketing": "npm run build --workspace=@amakers/marketing",
     "build:pdp": "npm run build --workspace=@amakers/pdp",
@@ -25,12 +26,16 @@
     "build:insta-auto": "npm run build --workspace=@amakers/insta-auto",
     "build:blog-auto": "npm run build --workspace=@amakers/blog-auto",
     "build:tistory-auto": "npm run build --workspace=@amakers/tistory-auto",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
     "db:generate": "npm run generate --workspace=@amakers/db",
     "db:migrate": "npm run migrate --workspace=@amakers/db",
     "db:studio": "npm run studio --workspace=@amakers/db"
   },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  },
+  "packageManager": "npm@11.13.0",
   "engines": {
     "node": ">=20.0.0"
   }

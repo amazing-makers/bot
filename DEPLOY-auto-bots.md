@@ -33,13 +33,25 @@ Cloudflare → amakers.co.kr → DNS → Add record:
 | CNAME | `tistoryauto` | `cname.vercel-dns.com` | DNS only |
 
 ## 3. Vercel 프로젝트 (앱마다 반복)
-1. Vercel → **Add New → Project** → Import **`amazing-makers/bot`**
+1. Vercel → **Add New → Project** → Import **`amazing-makers/bot`** (repo 에 `turbo.json` 있으면 **Turbo 배지** 표시)
 2. **Root Directory**: `apps/insta-auto` (각 앱 경로)
 3. **Build Command**: `cd ../.. && npm install && cd apps/insta-auto && npx prisma generate && next build`
 4. **Install Command**: 비워두기
 5. **Output Directory**: `.next` / **Framework**: Next.js
 6. **Environment Variables** (아래 4-1) 입력 → **Deploy**
 7. **Settings → Domains → Add** → `instaauto.amakers.co.kr` (1~2분 후 SSL 자동)
+
+> 한 repo(`bot`)에서 앱별로 위를 반복 → Vercel import 화면에 프로젝트 수가 쌓여 **"3+" (pchahub 처럼)** 표시됨. (자동 — 코드 작업 불필요)
+
+### 3-1. Turborepo — Turbo 배지 + "바뀐 앱만 빌드"
+repo 에 `turbo.json` 추가됨(루트). 핵심 이점은 **바뀐 앱만 재빌드** — 한 repo 에 3개 앱이 붙어 있어
+그냥 두면 아무 커밋이나 push 해도 3개 프로젝트가 전부 재빌드/재배포됨. 아래로 끔:
+- 각 Vercel 프로젝트 → **Settings → Git → Ignored Build Step** 에 입력:
+  ```
+  npx turbo-ignore
+  ```
+  (해당 앱 + 의존 패키지에 변경 없으면 빌드 스킵. 패키지명은 Root Directory 의 package.json 에서 자동 감지)
+- Build Command 는 위 3번 그대로 둬도 됨(turbo 강제 아님). 로컬에선 `npm run build`(=`turbo run build`)로 캐시 빌드.
 
 ### 4-1. 환경변수 (모든 앱 공통)
 ```
