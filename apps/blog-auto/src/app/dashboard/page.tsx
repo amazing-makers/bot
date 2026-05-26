@@ -4,10 +4,11 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { getBalance } from '@/lib/credit';
 import { listAccounts } from '@/lib/blog-account';
+import { PostActions } from '@/components/PostActions';
 import {
     AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box, Anchor, Paper,
 } from '@mantine/core';
-import { IconArticle, IconPlus, IconCoin, IconWorldWww, IconExternalLink } from '@tabler/icons-react';
+import { IconArticle, IconPlus, IconCoin, IconWorldWww, IconExternalLink, IconCalendarEvent } from '@tabler/icons-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,9 @@ export default async function DashboardPage() {
                             <Badge variant="light" color="blue" size="lg" leftSection={<IconCoin size={14} />}>
                                 {balance.toLocaleString()} credits
                             </Badge>
+                            <Button component="a" href="/dashboard/calendar" size="xs" variant="subtle" color="blue" leftSection={<IconCalendarEvent size={14} />}>
+                                달력
+                            </Button>
                             <Button component="a" href="/dashboard/accounts" size="xs" variant="subtle" color="blue" leftSection={<IconWorldWww size={14} />}>
                                 블로그 연결
                             </Button>
@@ -146,20 +150,23 @@ export default async function DashboardPage() {
                                                             <Text size="sm" fw={600} lineClamp={1}>{p.title}</Text>
                                                             {p.error && <Text size="11px" c="red" lineClamp={1}>⚠ {p.error}</Text>}
                                                         </Box>
-                                                        {p.link && (
-                                                            <Button
-                                                                component="a"
-                                                                href={p.link}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                size="xs"
-                                                                variant="subtle"
-                                                                color="blue"
-                                                                leftSection={<IconExternalLink size={12} />}
-                                                            >
-                                                                보기
-                                                            </Button>
-                                                        )}
+                                                        <Group gap="xs" wrap="nowrap">
+                                                            <PostActions postId={p.id} status={p.status} />
+                                                            {p.link && (
+                                                                <Button
+                                                                    component="a"
+                                                                    href={p.link}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    size="xs"
+                                                                    variant="subtle"
+                                                                    color="blue"
+                                                                    leftSection={<IconExternalLink size={12} />}
+                                                                >
+                                                                    보기
+                                                                </Button>
+                                                            )}
+                                                        </Group>
                                                     </Group>
                                                 </Paper>
                                             );
