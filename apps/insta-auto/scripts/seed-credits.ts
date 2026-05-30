@@ -9,7 +9,9 @@
  */
 
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../../packages/db/src/generated/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
 
 const DEFAULT_EMAIL = 'admin@amakers.co.kr';
 
@@ -23,7 +25,8 @@ async function main() {
         process.exit(1);
     }
 
-    const prisma = new PrismaClient();
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
     try {
         const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
