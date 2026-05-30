@@ -2,7 +2,10 @@
  * @amakers/types — 봇 간 공통 타입
  */
 
-// ─── 봇 레지스트리 ─────────────────────────────────────────
+// ─── 봇/도구 레지스트리 (허브 도구 그리드) ─────────────────
+export { BOT_TOOLS, type BotTool, type BotStatus } from './registry';
+
+// ─── 봇 레지스트리 (기존 admin 사용) ───────────────────────
 export type BotKind = 'marketing' | 'design' | 'mockup';
 
 export interface BotMeta {
