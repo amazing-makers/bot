@@ -1,7 +1,13 @@
 /**
- * @amakers/auth
+ * @amakers/auth — 공통 인증 (Edge-safe 진입점).
  *
- * 공통 NextAuth 헬퍼. 각 앱은 자체 auth.ts 를 가지되, 이 패키지에서 공통 로직을 가져다 씀.
+ * - 권한 헬퍼: isAdminEmail / requireAdmin (순수 함수)
+ * - Edge-safe 설정: buildAuthConfig (middleware 용)
+ *
+ * 자격증명 검증/NextAuth 인스턴스(Node, bcrypt+pg)는 `@amakers/auth/server` 에서:
+ *   import { createAuth } from '@amakers/auth/server';
  */
 
 export { isAdminEmail, requireAdmin } from './admin-guard';
+export { buildAuthConfig } from './config';
+export type { BuildAuthConfigOptions } from './config';
