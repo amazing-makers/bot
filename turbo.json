@@ -1,6 +1,16 @@
 {
     "$schema": "https://turbo.build/schema.json",
     "globalDependencies": ["tsconfig.base.json", ".env"],
+    "globalEnv": [
+        "DATABASE_URL",
+        "NEXTAUTH_SECRET",
+        "NEXTAUTH_URL",
+        "ENCRYPTION_KEY",
+        "CRON_SECRET",
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "ADMIN_EMAILS"
+    ],
     "tasks": {
         "@amakers/db#generate": {
             "cache": true,
