@@ -48,3 +48,6 @@ Thumbs.db
 # Misc
 coverage/
 .nyc_output/
+
+# @amakers/db 생성 Prisma 클라이언트
+packages/db/src/generated/

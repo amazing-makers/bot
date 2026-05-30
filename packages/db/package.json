@@ -10,15 +10,19 @@
   },
   "scripts": {
     "generate": "prisma generate",
-    "migrate": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy",
+    "pull": "prisma db pull",
+    "diff": "prisma migrate diff --from-config-datasource --to-schema ./prisma/schema.prisma --script",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^7.0.0"
+    "@prisma/adapter-pg": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "dotenv": "^17.4.2",
     "prisma": "^7.0.0",
     "typescript": "^5.5.0"
   }
