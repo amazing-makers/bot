@@ -71,6 +71,7 @@ async function executePublish(post: PostRow, creds: InstagramCredentials): Promi
             action: 'PUBLISH',
             refType: 'InstagramPost',
             refId: post.id,
+            idempotent: true, // 같은 글 재발행/재시도 시 이중 차감 방지
         });
 
         await prisma.instagramPost.update({

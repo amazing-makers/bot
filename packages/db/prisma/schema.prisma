@@ -1,0 +1,973 @@
+// @amakers/db — 통합 공유 Prisma 스키마 (source of truth)
+//
+// 모든 앱(insta-auto·blog-auto·tistory-auto·hub·admin·marketing…)이 이 단일 스키마를 공유한다.
+// 베이스 = marketingbot 슈퍼셋(31모델) + 오토앱 전용 모델(UserApiKey/UserCredit/CreditTransaction/
+//          Instagram*/Blog*/Tistory*) 머지. 공유 Neon DB 의 실제 41테이블과 1:1 일치.
+//
+// ⚠️ 공유 DB 에 `prisma db push`/`migrate` 금지 — 다른 앱 테이블 DROP 위험.
+//    스키마 변경은 추가 전용 SQL(`prisma db execute`)로만. 변경 후 반드시
+//    `prisma migrate diff --from-config-datasource --to-schema <이 파일> --script` 가 비어야 함(DB 일치).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url 은 prisma.config.ts 에서 주입(Prisma 7). 런타임은 src/client.ts 의 PrismaPg adapter.
+}
+
+// ════════════════════════════════════════════════════════════
+//  공유 — 계정 / 역할
+// ════════════════════════════════════════════════════════════
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPPORT
+}
+
+model User {
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  password              String
+  name                  String?
+  role                  UserRole  @default(USER)
+  onboardingCompletedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Phase 6 — 활성 Workspace ID (다중 브랜드 지원).
+  currentWorkspaceId String?
+
+  channels             MarketingChannel[]
+  campaigns            Campaign[]
+  agents               AgentInstance[]
+  licenses             License[]
+  aiConfig             UserAiConfig?
+  drafts               CampaignDraft[]
+  webhookTokens        UserWebhookToken[]
+  ownedWorkspaces      Workspace[]        @relation("WorkspaceOwner")
+  workspaceMemberships WorkspaceMember[]
+  subscription         Subscription?
+  campaignSeries       CampaignSeries[]
+
+  // Phase 13 — 리셀러 추천 트래킹.
+  referredByCodeId String?
+  referredByCode   ReferralCode? @relation("ReferredByCode", fields: [referredByCodeId], references: [id])
+  reseller         Reseller?
+
+  // Phase 20 — 인앱 알림
+  notifications Notification[]
+
+  // Phase 22 — Web Push 구독
+  pushSubscriptions PushSubscription[]
+
+  // Phase 24 — 콘텐츠 라이브러리·활동 피드·외부 알림 채널
+  captionTemplates     CaptionTemplate[]
+  activities           ActivityLog[]
+  notificationChannels UserNotificationChannel[]
+
+  // Phase 25 — 사용자 피드백
+  feedbacks UserFeedback[]
+
+  emailPreferences Json @default("{\"failures\": true, \"weekly\": true, \"welcome\": true}")
+
+  // Phase 50 — 같은 PC 에서 비밀번호 없이 다른 계정으로 빠르게 전환하기 위한 토큰.
+  trustedDevices TrustedDevice[]
+
+  // ── 오토앱(분해형) 관계 ─────────────────────────────────
+  apiKeys            UserApiKey[]
+  credits            UserCredit?
+  instagramAccounts  InstagramAccount[]
+  instagramPosts     InstagramPost[]
+  blogAccounts       BlogAccount[]
+  blogPosts          BlogPost[]
+  tistoryAccounts    TistoryAccount[]
+  tistoryPosts       TistoryPost[]
+  tistoryAgentTokens TistoryAgentToken[]
+}
+
+// Phase 50 — 같은 PC 에서 한 번 비밀번호로 인증한 계정은 7일간 비번 없이 전환 허용.
+model TrustedDevice {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  expiresAt  DateTime
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ════════════════════════════════════════════════════════════
+//  마케팅봇 — 채널 / 캠페인 / 발행 백본
+// ════════════════════════════════════════════════════════════
+
+enum ChannelType {
+  INSTAGRAM
+  FACEBOOK
+  X
+  TIKTOK
+  YOUTUBE
+  THREADS
+  NAVER_BLOG
+  NAVER_CAFE
+  KAKAO
+  EMAIL
+  SMS
+  WEIBO
+  XIAOHONGSHU
+  VK
+  LINE
+  WHATSAPP
+  PINTEREST
+  DOUYIN
+  LINKEDIN
+  TISTORY
+  WORDPRESS
+  TELEGRAM
+  DISCORD
+}
+
+enum ChannelStatus {
+  ACTIVE
+  PAUSED
+  ERROR
+  PENDING_AUTH
+}
+
+enum TaskStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum ChannelTaskKind {
+  VERIFY
+  OPEN_BROWSER
+}
+
+// Webhook 외부 트리거 토큰.
+model UserWebhookToken {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String           @unique
+  label      String?
+  enabled    Boolean          @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime         @default(now())
+  hits       UserWebhookHit[]
+
+  @@index([userId])
+}
+
+model UserWebhookHit {
+  id         String           @id @default(cuid())
+  tokenId    String
+  token      UserWebhookToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  bucketKey  String
+  bucketType String
+  count      Int              @default(0)
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([tokenId, bucketKey, bucketType])
+  @@index([updatedAt])
+}
+
+model CampaignDraft {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot      String   @default("campaign")
+  payload   Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([userId, slot])
+  @@index([updatedAt])
+}
+
+model Workspace {
+  id            String                @id @default(cuid())
+  name          String
+  slug          String                @unique
+  ownerId       String
+  owner         User                  @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  plan          String                @default("FREE")
+  logoUrl       String?
+  brandColor    String?               @default("#1D1D1B")
+  description   String?
+  members       WorkspaceMember[]
+  invitations   WorkspaceInvitation[]
+  partnerClient PartnerClient?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([ownerId])
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("MEMBER")
+  invitedBy   String?
+  joinedAt    DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  plan                 String    @default("FREE")
+  status               String    @default("active")
+  currentPeriodEnd     DateTime?
+  trialEndsAt          DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([stripeCustomerId])
+  @@index([status])
+}
+
+model License {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key        String    @unique
+  plan       String    @default("FREE")
+  validUntil DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model MarketingChannel {
+  id                   String              @id @default(cuid())
+  userId               String
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId          String?
+  type                 ChannelType
+  accountName          String
+  encryptedCredentials String              @db.Text
+  status               ChannelStatus       @default(PENDING_AUTH)
+  region               String              @default("korea")
+  language             String              @default("ko")
+  lastUsedAt           DateTime?
+  lastVerifiedAt       DateTime?
+  verifyError          String?             @db.Text
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  scheduledTasks ScheduledTask[]
+  verifyTasks    ChannelVerifyTask[]
+
+  @@index([userId])
+  @@index([userId, workspaceId])
+  @@index([type])
+  @@index([region])
+}
+
+model ChannelVerifyTask {
+  id         String           @id @default(cuid())
+  channelId  String
+  channel    MarketingChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  kind       ChannelTaskKind  @default(VERIFY)
+  status     TaskStatus       @default(PENDING)
+  errorLog   String?          @db.Text
+  agentId    String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([channelId])
+  @@index([status, createdAt])
+  @@index([kind, status])
+}
+
+model Campaign {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  name        String
+  description String?
+  status      String    @default("DRAFT")
+  scheduledAt DateTime?
+  completedAt DateTime?
+  tags        String[]  @default([])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  seriesId String?
+  series   CampaignSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+
+  tasks ScheduledTask[]
+
+  @@index([userId])
+  @@index([userId, workspaceId])
+  @@index([seriesId])
+  @@index([tags])
+}
+
+model ScheduledTask {
+  id          String           @id @default(cuid())
+  campaignId  String
+  campaign    Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  channelId   String
+  channel     MarketingChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  content     String           @db.Text
+  mediaUrls   Json?
+  scheduledAt DateTime
+  executedAt  DateTime?
+  status      TaskStatus       @default(PENDING)
+  errorLog    String?          @db.Text
+  agentId     String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([campaignId])
+  @@index([channelId])
+  @@index([status, scheduledAt])
+}
+
+model CampaignSeries {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId         String?
+  name                String
+  channelIds          Json
+  mode                String    @default("POOL")
+  captionStyle        String?   @default("VARY")
+  contentCategory     String?   @default("SNS")
+  scheduleType        String    @default("DAILY")
+  intervalHours       Int?
+  dailyTimes          Json?
+  weeklyDays          Json?
+  totalPosts          Int       @default(10)
+  completedPosts      Int       @default(0)
+  failedPosts         Int       @default(0)
+  mediaPool           Json?
+  contentSeed         String?   @db.Text
+  briefData           Json?
+  status              String    @default("DRAFT")
+  startAt             DateTime  @default(now())
+  endAt               DateTime?
+  nextRunAt           DateTime?
+  lastRunAt           DateTime?
+  lastError           String?   @db.Text
+  notifiedCompletedAt DateTime?
+  tags                String[]  @default([])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  campaigns Campaign[]
+
+  @@index([userId])
+  @@index([userId, workspaceId])
+  @@index([tags])
+  @@index([status, nextRunAt])
+}
+
+model AgentInstance {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  machineId   String   @unique
+  name        String?
+  version     String
+  os          String?
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, workspaceId])
+}
+
+// ════════════════════════════════════════════════════════════
+//  마케팅봇 — AI / 번역 / 사용량
+// ════════════════════════════════════════════════════════════
+
+model UserAiConfig {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiPriority          Json     @default("[\"gemini\",\"groq\",\"ollama\",\"claude\"]")
+  aiModels            Json     @default("{}")
+  aiKeysEncrypted     String?  @db.Text
+  taskPriorities      Json     @default("{}")
+  translationPriority Json     @default("[\"deepl\",\"libretranslate\",\"ai\"]")
+  deeplPro            Boolean  @default(false)
+  utm                 Json     @default("{}")
+  monthlyBudgetUsd    Float    @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model TranslationCache {
+  id         String   @id @default(cuid())
+  hash       String   @unique
+  sourceLang String
+  targetLang String
+  translated String   @db.Text
+  engine     String
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+}
+
+model AiUsageCounter {
+  id        String   @id @default(cuid())
+  scope     String
+  kind      String
+  engine    String
+  count     Int      @default(0)
+  monthKey  String
+  updatedAt DateTime @updatedAt
+
+  @@unique([scope, kind, engine, monthKey])
+  @@index([scope, monthKey])
+}
+
+// ════════════════════════════════════════════════════════════
+//  마케팅봇 — 리셀러 / 파트너 / 인보이스
+// ════════════════════════════════════════════════════════════
+
+model Reseller {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  contactEmail   String
+  taxStatus      String   @default("INDIVIDUAL")
+  businessNumber String?
+  bankAccount    String?
+  commissionRate Float    @default(0.10)
+  status         String   @default("ACTIVE")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  referralCodes ReferralCode[]
+  commissions   ReferralCommission[]
+  clients       PartnerClient[]
+
+  @@index([status])
+}
+
+model ReferralCode {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  resellerId  String
+  reseller    Reseller @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  referrals User[] @relation("ReferredByCode")
+
+  @@index([resellerId])
+  @@index([active])
+}
+
+model ReferralCommission {
+  id              String    @id @default(cuid())
+  resellerId      String
+  reseller        Reseller  @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+  referredUserId  String
+  periodYearMonth String
+  baseRevenue     Decimal   @db.Decimal(12, 2)
+  commissionRate  Float
+  amount          Decimal   @db.Decimal(12, 2)
+  status          String    @default("PENDING")
+  paidAt          DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([resellerId, referredUserId, periodYearMonth])
+  @@index([resellerId, status])
+  @@index([periodYearMonth])
+}
+
+model PartnerClient {
+  id           String    @id @default(cuid())
+  partnerId    String
+  partner      Reseller  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  workspaceId  String    @unique
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clientName   String
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  industry     String?
+  monthlyFee   Int?
+  status       String    @default("ACTIVE")
+  notes        String?
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  reports  PartnerClientReport[]
+  invoices ClientInvoice[]
+
+  @@index([partnerId, status])
+}
+
+model WorkspaceInvitation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        String    @default("MEMBER")
+  token       String    @unique
+  invitedBy   String
+  message     String?
+  status      String    @default("PENDING")
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  acceptedBy  String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, email])
+  @@index([token])
+  @@index([email, status])
+}
+
+model PartnerClientReport {
+  id                    String        @id @default(cuid())
+  partnerClientId       String
+  partnerClient         PartnerClient @relation(fields: [partnerClientId], references: [id], onDelete: Cascade)
+  periodYearMonth       String
+  totalCampaigns        Int           @default(0)
+  totalPublished        Int           @default(0)
+  totalFailed           Int           @default(0)
+  channelMix            Json?
+  topPerformingCampaign String?
+  pdfUrl                String?
+  pdfSizeKb             Int?
+  generatedAt           DateTime      @default(now())
+  generatedBy           String        @default("cron")
+  status                String        @default("READY")
+  errorMessage          String?
+  createdAt             DateTime      @default(now())
+
+  @@unique([partnerClientId, periodYearMonth])
+  @@index([partnerClientId, periodYearMonth])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  title     String
+  body      String?
+  link      String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+model ClientInvoice {
+  id              String        @id @default(cuid())
+  partnerClientId String
+  partnerClient   PartnerClient @relation(fields: [partnerClientId], references: [id], onDelete: Cascade)
+  invoiceNumber   String
+  periodYearMonth String
+  amount          Int
+  vat             Int           @default(0)
+  total           Int
+  description     String?       @db.Text
+  status          String        @default("DRAFT")
+  dueDate         DateTime?
+  sentAt          DateTime?
+  paidAt          DateTime?
+  paymentMethod   String?
+  paymentNotes    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([partnerClientId, invoiceNumber])
+  @@index([partnerClientId, status])
+  @@index([periodYearMonth])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  authKey   String
+  userAgent String?
+  createdAt DateTime @default(now())
+  lastUsed  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model CaptionTemplate {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  name        String
+  body        String    @db.Text
+  hashtags    String?
+  category    String?
+  usageCount  Int       @default(0)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, workspaceId])
+  @@index([userId, usageCount(sort: Desc)])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  kind        String
+  title       String
+  body        String?
+  link        String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model UserNotificationChannel {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  webhookUrl String
+  label      String?
+  enabled    Boolean   @default(true)
+  kindFilter Json?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId, enabled])
+}
+
+model UserFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String?  @db.Text
+  context   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([rating, createdAt])
+}
+
+// ════════════════════════════════════════════════════════════
+//  공유 — 통합 크레딧 지갑 (오토앱이 도입, 전 봇 공유)
+// ════════════════════════════════════════════════════════════
+
+// BYOK — 사용자가 입력한 외부 AI 키 (AES-256-GCM 암호화).
+model UserApiKey {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String
+  encryptedKey String    @db.Text
+  maskedHint   String
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("UserApiKey")
+}
+
+model UserCredit {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions CreditTransaction[]
+
+  @@map("UserCredit")
+}
+
+model CreditTransaction {
+  id           String     @id @default(cuid())
+  userCreditId String
+  userCredit   UserCredit @relation(fields: [userCreditId], references: [id], onDelete: Cascade)
+  delta        Int
+  balanceAfter Int
+  bot          String?
+  action       String
+  refType      String?
+  refId        String?
+  metadata     Json?
+  createdAt    DateTime   @default(now())
+
+  @@index([userCreditId, createdAt])
+  @@index([bot, createdAt])
+  @@map("CreditTransaction")
+}
+
+// ════════════════════════════════════════════════════════════
+//  오토앱 — 인스타오토 (instaauto)
+// ════════════════════════════════════════════════════════════
+
+enum InstagramAccountStatus {
+  ACTIVE
+  PENDING_AUTH
+  ERROR
+}
+
+enum InstagramPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum InstagramMediaType {
+  IMAGE
+  REELS
+}
+
+model InstagramAccount {
+  id                   String                 @id @default(cuid())
+  userId               String
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  igUserId             String
+  username             String
+  followers            Int?
+  encryptedAccessToken String                 @db.Text
+  tokenExpiresAt       DateTime?
+  status               InstagramAccountStatus @default(ACTIVE)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  posts InstagramPost[]
+
+  @@unique([userId, igUserId])
+  @@index([userId])
+  @@map("InstagramAccount")
+}
+
+model InstagramPost {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  account   InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  caption   String             @db.Text
+  imageUrl  String?
+  videoUrl  String?
+  mediaType InstagramMediaType @default(IMAGE)
+
+  status      InstagramPostStatus @default(DRAFT)
+  scheduledAt DateTime?
+  publishedAt DateTime?
+
+  mediaId       String?
+  permalink     String?
+  error         String?   @db.Text
+  creditsUsed   Int?
+  attemptCount  Int       @default(0)
+  lastAttemptAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([accountId, status])
+  @@index([status, scheduledAt])
+  @@map("InstagramPost")
+}
+
+// ════════════════════════════════════════════════════════════
+//  오토앱 — 블로그오토 (naverblogauto / WordPress)
+// ════════════════════════════════════════════════════════════
+
+enum BlogProvider {
+  WORDPRESS
+  NAVER
+}
+
+enum BlogAccountStatus {
+  ACTIVE
+  PENDING_AUTH
+  ERROR
+}
+
+enum BlogPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+model BlogAccount {
+  id              String            @id @default(cuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        BlogProvider      @default(WORDPRESS)
+  siteUrl         String
+  username        String
+  encryptedSecret String            @db.Text
+  status          BlogAccountStatus @default(ACTIVE)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  posts BlogPost[]
+
+  @@unique([userId, provider, siteUrl])
+  @@index([userId])
+  @@map("BlogAccount")
+}
+
+model BlogPost {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  account   BlogAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  title    String
+  content  String  @db.Text
+  photoUrl String?
+
+  status      BlogPostStatus @default(DRAFT)
+  scheduledAt DateTime?
+  publishedAt DateTime?
+
+  remotePostId  String?
+  link          String?
+  error         String?   @db.Text
+  creditsUsed   Int?
+  attemptCount  Int       @default(0)
+  lastAttemptAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([accountId, status])
+  @@index([status, scheduledAt])
+  @@map("BlogPost")
+}
+
+// ════════════════════════════════════════════════════════════
+//  오토앱 — 티스토리오토 (tistoryauto, 에이전트 발행)
+// ════════════════════════════════════════════════════════════
+
+enum TistoryAccountStatus {
+  ACTIVE
+  PENDING_AUTH
+  ERROR
+}
+
+enum TistoryPostStatus {
+  DRAFT
+  SCHEDULED
+  QUEUED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+model TistoryAccount {
+  id              String               @id @default(cuid())
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteUrl         String
+  username        String
+  encryptedSecret String?              @db.Text
+  status          TistoryAccountStatus @default(ACTIVE)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  posts TistoryPost[]
+
+  @@unique([userId, siteUrl])
+  @@index([userId])
+  @@map("TistoryAccount")
+}
+
+model TistoryPost {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  account   TistoryAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  title    String
+  content  String  @db.Text
+  photoUrl String?
+
+  status      TistoryPostStatus @default(DRAFT)
+  scheduledAt DateTime?
+  publishedAt DateTime?
+
+  remotePostId String?
+  link         String?
+  error        String? @db.Text
+  creditsUsed  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([accountId, status])
+  @@index([status, scheduledAt])
+  @@map("TistoryPost")
+}
+
+model TistoryAgentToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String    @unique
+  label      String?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("TistoryAgentToken")
+}
