@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import {
   Container, Group, Title, Text, Badge, Button, Stack, ThemeIcon, Divider,
 } from '@mantine/core';
-import { IconBolt, IconKey, IconArrowRight } from '@tabler/icons-react';
+import { IconBolt, IconKey, IconArrowRight, IconSend } from '@tabler/icons-react';
 import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
 import { ToolGrid } from '@/components/ToolGrid';
@@ -50,6 +50,29 @@ export default async function HubDashboard() {
         <Title order={2}>안녕하세요, {displayName}님 👋</Title>
         <Text c="dimmed">사용할 자동화 도구를 선택하세요. 모든 도구는 기본 무료이며, AI는 내 API 키로 동작합니다.</Text>
       </Stack>
+
+      {/* 1작성 → 다채널 CTA */}
+      <a href="/compose" style={{ textDecoration: 'none', display: 'block', marginBottom: 'var(--mantine-spacing-lg)' }}>
+        <Group
+          justify="space-between"
+          wrap="nowrap"
+          p="md"
+          style={{
+            borderRadius: 12,
+            cursor: 'pointer',
+            background: 'linear-gradient(90deg, var(--mantine-color-blue-6), var(--mantine-color-grape-6))',
+          }}
+        >
+          <Group gap="sm" wrap="nowrap">
+            <ThemeIcon size={40} radius="md" variant="white" color="blue"><IconSend size={22} /></ThemeIcon>
+            <div>
+              <Text fw={700} c="white">✍️ 한 번 작성 → 인스타·블로그·티스토리 동시 발행</Text>
+              <Text size="sm" c="white" opacity={0.9}>제목·본문·이미지를 한 번만 쓰면 선택한 모든 채널에 자동 적응되어 게시됩니다.</Text>
+            </div>
+          </Group>
+          <IconArrowRight size={22} color="white" />
+        </Group>
+      </a>
 
       {!hasKey && (
         <Group mb="lg">
