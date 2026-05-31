@@ -2,14 +2,14 @@ import { redirect } from 'next/navigation';
 import dayjs from 'dayjs';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { getBalance } from '@/lib/credit';
 import { listAccounts } from '@/lib/tistory-account';
+import { PostActions } from '@/components/PostActions';
 import {
     AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid,
     ThemeIcon, Box, Anchor, Paper, Alert,
 } from '@mantine/core';
 import {
-    IconArticle, IconPlus, IconCoin, IconWorldWww, IconExternalLink, IconRobot, IconCalendarEvent,
+    IconArticle, IconPlus, IconKey, IconWorldWww, IconExternalLink, IconRobot, IconCalendarEvent, IconAlertTriangle,
 } from '@tabler/icons-react';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,7 @@ export const dynamic = 'force-dynamic';
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
     DRAFT: { label: '초안', color: 'gray' },
     SCHEDULED: { label: '예약됨', color: 'blue' },
+    QUEUED: { label: '발행 대기(큐)', color: 'grape' },
     PUBLISHING: { label: '발행 중', color: 'yellow' },
     PUBLISHED: { label: '발행됨', color: 'teal' },
     FAILED: { label: '실패', color: 'red' },
@@ -27,9 +28,8 @@ export default async function DashboardPage() {
     const userId = (session?.user as any)?.id;
     if (!userId) redirect('/login?callbackUrl=/dashboard');
 
-    const [accounts, balance, posts] = await Promise.all([
+    const [accounts, posts] = await Promise.all([
         listAccounts(userId),
-        getBalance(userId),
         prisma.tistoryPost.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
@@ -52,11 +52,11 @@ export default async function DashboardPage() {
                             </Anchor>
                         </Group>
                         <Group gap="md">
-                            <Badge variant="light" color="orange" size="lg" leftSection={<IconCoin size={14} />}>
-                                {balance.toLocaleString()} credits
-                            </Badge>
                             <Button component="a" href="/dashboard/calendar" size="xs" variant="subtle" color="orange" leftSection={<IconCalendarEvent size={14} />}>
                                 달력
+                            </Button>
+                            <Button component="a" href="/dashboard/settings/ai" size="xs" variant="subtle" color="orange" leftSection={<IconKey size={14} />}>
+                                AI키
                             </Button>
                             <Button component="a" href="/dashboard/accounts" size="xs" variant="subtle" color="orange" leftSection={<IconWorldWww size={14} />}>
                                 블로그
@@ -72,6 +72,14 @@ export default async function DashboardPage() {
 
             <AppShellMain>
                 <Container size="xl">
+                    {accounts.some((a) => a.status !== 'ACTIVE') && (
+                        <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />} mb="lg" title="블로그 인증 대기">
+                            <Group justify="space-between" align="center">
+                                <Text size="sm">일부 블로그가 인증 대기 상태입니다. 데스크톱 에이전트에서 카카오 로그인(세션 저장)을 1회 완료하면 발행됩니다.</Text>
+                                <Button component="a" href="/dashboard/agent" size="xs" color="red" variant="filled">에이전트 설정</Button>
+                            </Group>
+                        </Alert>
+                    )}
                     <Group justify="space-between" mb="lg">
                         <Stack gap={2}>
                             <Title order={2}>대시보드</Title>
@@ -154,11 +162,14 @@ export default async function DashboardPage() {
                                                             <Text size="sm" fw={600} lineClamp={1}>{p.title}</Text>
                                                             {p.error && <Text size="11px" c="orange.7" lineClamp={2}>ⓘ {p.error}</Text>}
                                                         </Box>
-                                                        {p.link && (
-                                                            <Button component="a" href={p.link} target="_blank" rel="noreferrer" size="xs" variant="subtle" color="orange" leftSection={<IconExternalLink size={12} />}>
-                                                                보기
-                                                            </Button>
-                                                        )}
+                                                        <Group gap="xs" wrap="nowrap">
+                                                            <PostActions postId={p.id} status={p.status} />
+                                                            {p.link && (
+                                                                <Button component="a" href={p.link} target="_blank" rel="noreferrer" size="xs" variant="subtle" color="orange" leftSection={<IconExternalLink size={12} />}>
+                                                                    보기
+                                                                </Button>
+                                                            )}
+                                                        </Group>
                                                     </Group>
                                                 </Paper>
                                             );
