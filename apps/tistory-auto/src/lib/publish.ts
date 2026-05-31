@@ -30,3 +30,22 @@ export async function publishPostNow(userId: string, postId: string): Promise<Pu
         error: undefined,
     };
 }
+
+export interface DispatchSummary { queued: number }
+
+/** 예약 도래(SCHEDULED + scheduledAt<=now)한 글을 QUEUED 로 전환 → 에이전트가 발행. (cron) */
+export async function dispatchDueScheduled(limit = 50): Promise<DispatchSummary> {
+    const now = new Date();
+    const due = await prisma.tistoryPost.findMany({
+        where: { status: 'SCHEDULED', scheduledAt: { lte: now } },
+        orderBy: { scheduledAt: 'asc' },
+        take: limit,
+        select: { id: true },
+    });
+    if (due.length === 0) return { queued: 0 };
+    const res = await prisma.tistoryPost.updateMany({
+        where: { id: { in: due.map((p) => p.id) }, status: 'SCHEDULED' },
+        data: { status: 'QUEUED', error: null },
+    });
+    return { queued: res.count };
+}
