@@ -10,7 +10,7 @@ import {
     IconSend, IconCalendarTime, IconAlertCircle, IconSparkles, IconClock, IconHash, IconBrandInstagram, IconHeart, IconMessageCircle, IconWand,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { createPostAction } from '@/app/actions/posts';
+import { createPostAction, updatePostAction } from '@/app/actions/posts';
 import { generateImageAction, generateCaptionAction } from '@/app/actions/ai';
 import { IMAGE_RATIOS, type ImageRatio } from '@/lib/ai/image-gen';
 import { suggestPrimeTime } from '@/lib/scheduling/prime-time';
@@ -26,16 +26,23 @@ function toLocalInput(d: Date): string {
 export function ComposeForm({
     accounts,
     initialScheduledAt,
+    editPost,
+    hasAiKey = false,
 }: {
     accounts: { value: string; label: string }[];
     initialScheduledAt?: string;
+    editPost?: { id: string; accountId: string; caption: string; imageUrl: string | null; scheduledAt: string | null };
+    hasAiKey?: boolean;
 }) {
     const router = useRouter();
-    const [accountId, setAccountId] = useState<string | null>(accounts[0]?.value ?? null);
-    const [caption, setCaption] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
-    const [schedule, setSchedule] = useState(!!initialScheduledAt);
-    const [scheduledAt, setScheduledAt] = useState(initialScheduledAt ?? '');
+    const isEdit = !!editPost;
+    const [accountId, setAccountId] = useState<string | null>(editPost?.accountId ?? accounts[0]?.value ?? null);
+    const [caption, setCaption] = useState(editPost?.caption ?? '');
+    const [imageUrl, setImageUrl] = useState(editPost?.imageUrl ?? '');
+    const [schedule, setSchedule] = useState(!!(editPost?.scheduledAt ?? initialScheduledAt));
+    const [scheduledAt, setScheduledAt] = useState(
+        editPost?.scheduledAt ? toLocalInput(new Date(editPost.scheduledAt)) : (initialScheduledAt ?? ''),
+    );
     const [err, setErr] = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
 
@@ -92,14 +99,14 @@ export function ComposeForm({
     const submit = (publishNow: boolean) => {
         setErr(null);
         if (!accountId) { setErr('계정을 선택하세요'); return; }
+        const scheduledIso = schedule && scheduledAt ? new Date(scheduledAt).toISOString() : undefined;
         startTransition(async () => {
-            const r = await createPostAction({
-                accountId, caption, imageUrl, publishNow,
-                scheduledAt: schedule && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
-            });
+            const r = isEdit
+                ? await updatePostAction({ postId: editPost!.id, caption, imageUrl, publishNow, scheduledAt: scheduledIso })
+                : await createPostAction({ accountId, caption, imageUrl, publishNow, scheduledAt: scheduledIso });
             if (!r.ok) { setErr(r.error || '실패했습니다'); return; }
             notifications.show({
-                title: publishNow ? '발행 완료' : schedule ? '예약 완료' : '초안 저장',
+                title: publishNow ? '발행 완료' : schedule ? (isEdit ? '예약 수정' : '예약 완료') : (isEdit ? '수정 저장' : '초안 저장'),
                 message: publishNow ? '인스타그램에 게시되었습니다.' : '대시보드에서 확인하세요.',
                 color: 'teal',
             });
@@ -145,8 +152,13 @@ export function ComposeForm({
                                 ]} />
                                 <Button size="xs" color="grape" loading={capPending} leftSection={<IconWand size={14} />} onClick={genCaption}>캡션 생성</Button>
                             </Group>
-                            {needKey && (
-                                <Text size="xs" c="red">무료 AI 키가 필요합니다 → <Anchor href="/dashboard/settings/ai" size="xs">AI 설정에서 등록</Anchor></Text>
+                            {(needKey || !hasAiKey) && (
+                                <Alert color="blue" variant="light" py={6} px="sm">
+                                    <Text size="xs">
+                                        무료 AI 키를 연결하면 캡션을 자동 생성합니다 →{' '}
+                                        <Anchor href="/dashboard/settings/ai" size="xs" fw={700}>AI 키 연결</Anchor>
+                                    </Text>
+                                </Alert>
                             )}
                         </Stack>
                     </Paper>
@@ -179,11 +191,17 @@ export function ComposeForm({
 
                     <Group justify="flex-end">
                         {schedule ? (
-                            <Button color="blue" leftSection={<IconCalendarTime size={16} />} loading={pending} onClick={() => submit(false)}>예약하기</Button>
+                            <Button color="blue" leftSection={<IconCalendarTime size={16} />} loading={pending} onClick={() => submit(false)}>
+                                {isEdit ? '예약 수정 저장' : '예약하기'}
+                            </Button>
                         ) : (
                             <>
-                                <Button variant="subtle" color="gray" loading={pending} onClick={() => submit(false)}>초안 저장</Button>
-                                <Button color="grape" leftSection={<IconSend size={16} />} loading={pending} onClick={() => submit(true)}>지금 발행</Button>
+                                <Button variant="subtle" color="gray" loading={pending} onClick={() => submit(false)}>
+                                    {isEdit ? '수정 저장' : '초안 저장'}
+                                </Button>
+                                <Button color="grape" leftSection={<IconSend size={16} />} loading={pending} onClick={() => submit(true)}>
+                                    {isEdit ? '수정 후 발행' : '지금 발행'}
+                                </Button>
                             </>
                         )}
                     </Group>

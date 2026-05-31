@@ -36,7 +36,7 @@ export default function SignupPage() {
       window.location.href = '/login';
       return;
     }
-    notifications.show({ title: '환영합니다!', message: '가입 보너스 크레딧이 지급됐습니다.', color: 'grape' });
+    notifications.show({ title: '환영합니다!', message: 'Amakers 허브에 오신 것을 환영합니다.', color: 'grape' });
     window.location.href = '/';
   };
 
@@ -51,7 +51,7 @@ export default function SignupPage() {
 
       <Paper withBorder shadow="md" p={30} radius="md">
         <Alert color="grape" variant="light" icon={<IconGift size={16} />} mb="md">
-          가입하면 <b>100 크레딧</b>을 무료로 드려요. 모든 도구에서 바로 사용 가능합니다.
+          가입은 <b>무료</b>예요. 한 번 가입하면 인스타·블로그 등 모든 자동화 도구를 SSO로 바로 사용합니다.
         </Alert>
         <form onSubmit={handleSubmit}>
           <Stack>

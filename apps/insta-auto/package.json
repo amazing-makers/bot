@@ -12,6 +12,7 @@
     "seed:user": "tsx scripts/seed-user.ts"
   },
   "dependencies": {
+    "@amakers/ai": "*",
     "@amakers/auth": "*",
     "@amakers/billing": "*",
     "@amakers/db": "*",
