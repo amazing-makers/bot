@@ -3,14 +3,14 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-    Card, Stack, Select, Textarea, TextInput, Button, Group, Text, Image, Box, Switch, Alert, Divider,
+    Card, Stack, Select, MultiSelect, Textarea, TextInput, Button, Group, Text, Image, Box, Switch, Alert, Divider,
     SegmentedControl, Paper, Avatar, Tooltip, Anchor,
 } from '@mantine/core';
 import {
     IconSend, IconCalendarTime, IconAlertCircle, IconSparkles, IconClock, IconHash, IconBrandInstagram, IconHeart, IconMessageCircle, IconWand,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { createPostAction, updatePostAction } from '@/app/actions/posts';
+import { createPostsAction, updatePostAction } from '@/app/actions/posts';
 import { generateImageAction, generateCaptionAction } from '@/app/actions/ai';
 import { IMAGE_RATIOS, type ImageRatio } from '@/lib/ai/image-gen';
 import { suggestPrimeTime } from '@/lib/scheduling/prime-time';
@@ -37,6 +37,7 @@ export function ComposeForm({
     const router = useRouter();
     const isEdit = !!editPost;
     const [accountId, setAccountId] = useState<string | null>(editPost?.accountId ?? accounts[0]?.value ?? null);
+    const [accountIds, setAccountIds] = useState<string[]>(editPost ? [editPost.accountId] : (accounts[0] ? [accounts[0].value] : []));
     const [caption, setCaption] = useState(editPost?.caption ?? '');
     const [imageUrl, setImageUrl] = useState(editPost?.imageUrl ?? '');
     const [schedule, setSchedule] = useState(!!(editPost?.scheduledAt ?? initialScheduledAt));
@@ -58,7 +59,8 @@ export function ComposeForm({
     const [capPending, startCap] = useTransition();
 
     const hashtagCount = (caption.match(/#[^\s#]+/g) || []).length;
-    const accountLabel = accounts.find((a) => a.value === accountId)?.label ?? '@account';
+    const previewAccount = isEdit ? accountId : accountIds[0];
+    const accountLabel = accounts.find((a) => a.value === previewAccount)?.label ?? '@account';
 
     const genImage = () => {
         setErr(null);
@@ -98,17 +100,33 @@ export function ComposeForm({
 
     const submit = (publishNow: boolean) => {
         setErr(null);
-        if (!accountId) { setErr('계정을 선택하세요'); return; }
         const scheduledIso = schedule && scheduledAt ? new Date(scheduledAt).toISOString() : undefined;
+
+        if (isEdit) {
+            startTransition(async () => {
+                const r = await updatePostAction({ postId: editPost!.id, caption, imageUrl, publishNow, scheduledAt: scheduledIso });
+                if (!r.ok) { setErr(r.error || '실패했습니다'); return; }
+                notifications.show({
+                    title: publishNow ? '발행 완료' : schedule ? '예약 수정' : '수정 저장',
+                    message: publishNow ? '인스타그램에 게시되었습니다.' : '대시보드에서 확인하세요.',
+                    color: 'teal',
+                });
+                router.push('/dashboard');
+            });
+            return;
+        }
+
+        if (accountIds.length === 0) { setErr('계정을 1개 이상 선택하세요'); return; }
         startTransition(async () => {
-            const r = isEdit
-                ? await updatePostAction({ postId: editPost!.id, caption, imageUrl, publishNow, scheduledAt: scheduledIso })
-                : await createPostAction({ accountId, caption, imageUrl, publishNow, scheduledAt: scheduledIso });
+            const r = await createPostsAction({ accountIds, caption, imageUrl, publishNow, scheduledAt: scheduledIso });
             if (!r.ok) { setErr(r.error || '실패했습니다'); return; }
+            const msg = publishNow
+                ? `${r.published}/${r.accounts}개 계정 발행 완료${r.failed ? ` · 실패 ${r.failed}` : ''}`
+                : `${r.accounts}개 계정에 ${schedule ? '예약' : '초안 저장'} 완료`;
             notifications.show({
-                title: publishNow ? '발행 완료' : schedule ? (isEdit ? '예약 수정' : '예약 완료') : (isEdit ? '수정 저장' : '초안 저장'),
-                message: publishNow ? '인스타그램에 게시되었습니다.' : '대시보드에서 확인하세요.',
-                color: 'teal',
+                title: publishNow ? '발행' : schedule ? '예약' : '저장',
+                message: msg,
+                color: r.failed ? 'orange' : 'teal',
             });
             router.push('/dashboard');
         });
@@ -119,7 +137,18 @@ export function ComposeForm({
             {/* 작성 폼 */}
             <Card withBorder p="lg" radius="md" style={{ flex: 1, minWidth: 340 }}>
                 <Stack>
-                    <Select label="계정" data={accounts} value={accountId} onChange={setAccountId} allowDeselect={false} />
+                    {isEdit ? (
+                        <Select label="계정" data={accounts} value={accountId} onChange={setAccountId} allowDeselect={false} disabled />
+                    ) : (
+                        <MultiSelect
+                            label="계정 (여러 개 선택 시 동시 발행)"
+                            placeholder="발행할 계정 선택"
+                            data={accounts}
+                            value={accountIds}
+                            onChange={setAccountIds}
+                            clearable
+                        />
+                    )}
 
                     {/* AI 이미지 생성 */}
                     <Paper withBorder p="sm" radius="md" bg="grape.0">

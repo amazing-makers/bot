@@ -68,6 +68,54 @@ export async function createPostAction(input: CreatePostInput) {
     return { ok: true as const, postId: post.id };
 }
 
+export interface CreatePostsInput {
+    accountIds: string[];
+    caption: string;
+    imageUrl?: string;
+    publishNow?: boolean;
+    scheduledAt?: string;
+}
+
+/** 여러 계정에 동시 작성/발행 — 선택한 계정마다 글 1개씩 생성(+발행). */
+export async function createPostsAction(input: CreatePostsInput) {
+    const userId = await requireUserId();
+
+    const caption = (input.caption || '').trim();
+    if (!caption) return { ok: false as const, error: 'caption 을 입력하세요' };
+    if (caption.length > IG_CAPTION_LIMIT) {
+        return { ok: false as const, error: `caption 한도 ${IG_CAPTION_LIMIT}자 초과 (현재 ${caption.length}자)` };
+    }
+    const imageUrl = (input.imageUrl || '').trim() || null;
+    const imgErr = validateImageUrl(imageUrl);
+    if (imgErr) return { ok: false as const, error: imgErr };
+
+    const ids = [...new Set((input.accountIds || []).filter(Boolean))];
+    if (ids.length === 0) return { ok: false as const, error: '계정을 1개 이상 선택하세요' };
+
+    const owned = await prisma.instagramAccount.findFirst({ where: { id: { in: ids }, userId }, select: { id: true } });
+    if (!owned) return { ok: false as const, error: '선택한 계정을 찾을 수 없습니다' };
+    const accounts = await prisma.instagramAccount.findMany({ where: { id: { in: ids }, userId }, select: { id: true } });
+
+    const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+    let created = 0, published = 0, failed = 0;
+    const errors: string[] = [];
+
+    for (const acc of accounts) {
+        const post = await prisma.instagramPost.create({
+            data: { userId, accountId: acc.id, caption, imageUrl, mediaType: 'IMAGE', status: scheduledAt ? 'SCHEDULED' : 'DRAFT', scheduledAt },
+        });
+        created++;
+        if (input.publishNow && !scheduledAt) {
+            const outcome = await publishPostNow(userId, post.id);
+            if (outcome.ok) published++;
+            else { failed++; if (outcome.error) errors.push(outcome.error); }
+        }
+    }
+
+    revalidatePath('/dashboard');
+    return { ok: true as const, accounts: accounts.length, created, published, failed, errors };
+}
+
 export interface UpdatePostInput {
     postId: string;
     caption: string;

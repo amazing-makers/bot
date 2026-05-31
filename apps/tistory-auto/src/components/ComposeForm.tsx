@@ -4,14 +4,14 @@ import { useState, useRef, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { marked } from 'marked';
 import {
-    Card, Stack, Select, Textarea, TextInput, Button, Group, Text, Image, Box, Switch, Alert, Divider,
+    Card, Stack, Select, MultiSelect, Textarea, TextInput, Button, Group, Text, Image, Box, Switch, Alert, Divider,
     SegmentedControl, Paper, Tooltip, Anchor, ThemeIcon, Typography, ScrollArea,
 } from '@mantine/core';
 import {
     IconSend, IconCalendarTime, IconAlertCircle, IconSparkles, IconClock, IconArticle, IconWand, IconPhoto, IconStar, IconRobot,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { createPostAction, updatePostAction } from '@/app/actions/posts';
+import { createPostsAction, updatePostAction } from '@/app/actions/posts';
 import { generateImageAction, generateBlogPostAction } from '@/app/actions/ai';
 import { IMAGE_RATIOS, type ImageRatio } from '@/lib/ai/image-gen';
 import type { BlogTone, BlogLength } from '@/lib/ai/writer';
@@ -36,6 +36,7 @@ export function ComposeForm({
     const router = useRouter();
     const isEdit = !!editPost;
     const [accountId, setAccountId] = useState<string | null>(editPost?.accountId ?? accounts[0]?.value ?? null);
+    const [accountIds, setAccountIds] = useState<string[]>(editPost ? [editPost.accountId] : (accounts[0] ? [accounts[0].value] : []));
     const [title, setTitle] = useState(editPost?.title ?? '');
     const [content, setContent] = useState(editPost?.content ?? '');
     const [photoUrl, setPhotoUrl] = useState(editPost?.photoUrl ?? '');
@@ -111,18 +112,30 @@ export function ComposeForm({
 
     const submit = (publishNow: boolean) => {
         setErr(null);
-        if (!accountId) { setErr('블로그를 선택하세요'); return; }
         const scheduledIso = schedule && scheduledAt ? new Date(scheduledAt).toISOString() : undefined;
-        startTransition(async () => {
-            const r = isEdit
-                ? await updatePostAction({ postId: editPost!.id, title, content, photoUrl, publishNow, scheduledAt: scheduledIso })
-                : await createPostAction({ accountId, title, content, photoUrl, publishNow, scheduledAt: scheduledIso });
-            if (!r.ok) { setErr(r.error || '실패했습니다'); return; }
-            notifications.show({
-                title: publishNow ? '발행 큐 적재' : schedule ? (isEdit ? '예약 수정' : '예약 완료') : (isEdit ? '수정 저장' : '초안 저장'),
-                message: publishNow ? '데스크톱 에이전트가 티스토리에 발행합니다 (큐 대기).' : '대시보드에서 확인하세요.',
-                color: 'teal',
+
+        if (isEdit) {
+            startTransition(async () => {
+                const r = await updatePostAction({ postId: editPost!.id, title, content, photoUrl, publishNow, scheduledAt: scheduledIso });
+                if (!r.ok) { setErr(r.error || '실패했습니다'); return; }
+                notifications.show({
+                    title: publishNow ? '발행 큐 적재' : schedule ? '예약 수정' : '수정 저장',
+                    message: publishNow ? '데스크톱 에이전트가 티스토리에 발행합니다 (큐 대기).' : '대시보드에서 확인하세요.',
+                    color: 'teal',
+                });
+                router.push('/dashboard');
             });
+            return;
+        }
+
+        if (accountIds.length === 0) { setErr('블로그를 1개 이상 선택하세요'); return; }
+        startTransition(async () => {
+            const r = await createPostsAction({ accountIds, title, content, photoUrl, publishNow, scheduledAt: scheduledIso });
+            if (!r.ok) { setErr(r.error || '실패했습니다'); return; }
+            const msg = publishNow
+                ? `${r.published}/${r.accounts}개 블로그 큐 적재${r.failed ? ` · 실패 ${r.failed}` : ''}`
+                : `${r.accounts}개 블로그에 ${schedule ? '예약' : '초안 저장'} 완료`;
+            notifications.show({ title: publishNow ? '발행(큐)' : schedule ? '예약' : '저장', message: msg, color: r.failed ? 'orange' : 'teal' });
             router.push('/dashboard');
         });
     };
@@ -131,7 +144,18 @@ export function ComposeForm({
         <Group align="flex-start" gap="lg" wrap="wrap">
             <Card withBorder p="lg" radius="md" style={{ flex: 1, minWidth: 380 }}>
                 <Stack>
-                    <Select label="블로그" data={accounts} value={accountId} onChange={setAccountId} allowDeselect={false} />
+                    {isEdit ? (
+                        <Select label="블로그" data={accounts} value={accountId} onChange={setAccountId} allowDeselect={false} disabled />
+                    ) : (
+                        <MultiSelect
+                            label="블로그 (여러 개 선택 시 동시 발행)"
+                            placeholder="발행할 블로그 선택"
+                            data={accounts}
+                            value={accountIds}
+                            onChange={setAccountIds}
+                            clearable
+                        />
+                    )}
 
                     {/* AI 글쓰기 */}
                     <Paper withBorder p="sm" radius="md" bg="orange.0">
