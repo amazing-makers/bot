@@ -61,6 +61,58 @@ export async function createPostAction(input: CreatePostInput) {
     return { ok: true as const, postId: post.id };
 }
 
+export interface UpdatePostInput {
+    postId: string;
+    title: string;
+    content: string;
+    photoUrl?: string;
+    scheduledAt?: string;
+    publishNow?: boolean;
+}
+
+/** DRAFT/SCHEDULED 글만 수정 가능. 소유 검증. */
+export async function updatePostAction(input: UpdatePostInput) {
+    const userId = await requireUserId();
+
+    const title = (input.title || '').trim();
+    const content = (input.content || '').trim();
+    if (!title) return { ok: false as const, error: '제목을 입력하세요' };
+    if (!content) return { ok: false as const, error: '본문을 입력하세요' };
+
+    const existing = await prisma.tistoryPost.findFirst({
+        where: { id: input.postId, userId },
+        select: { id: true, status: true },
+    });
+    if (!existing) return { ok: false as const, error: '글을 찾을 수 없습니다' };
+    if (existing.status !== 'DRAFT' && existing.status !== 'SCHEDULED') {
+        return { ok: false as const, error: '발행 대기/발행된 글은 수정할 수 없습니다' };
+    }
+
+    const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+
+    await prisma.tistoryPost.update({
+        where: { id: existing.id },
+        data: {
+            title,
+            content,
+            photoUrl: (input.photoUrl || '').trim() || null,
+            status: scheduledAt ? 'SCHEDULED' : 'DRAFT',
+            scheduledAt,
+            error: null,
+        },
+    });
+
+    revalidatePath('/dashboard');
+
+    if (input.publishNow && !scheduledAt) {
+        const outcome = await publishPostNow(userId, existing.id);
+        revalidatePath('/dashboard');
+        return { ...outcome, postId: existing.id };
+    }
+
+    return { ok: true as const, postId: existing.id };
+}
+
 export async function publishPostAction(postId: string) {
     const userId = await requireUserId();
     const outcome = await publishPostNow(userId, postId);

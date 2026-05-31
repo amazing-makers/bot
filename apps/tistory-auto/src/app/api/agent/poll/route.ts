@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { marked } from 'marked';
 import { prisma } from '@/lib/prisma';
 import { resolveAgentToken, bearerFromHeader } from '@/lib/agent-token';
 
@@ -27,11 +28,13 @@ export async function POST(req: NextRequest) {
         data: { status: 'PUBLISHING' },
     });
 
+    // content 는 마크다운 원문. 에이전트가 티스토리 에디터(HTML 모드)에 붙여넣도록 HTML 도 함께 제공.
     const tasks = queued.map((p) => ({
         postId: p.id,
         siteUrl: p.account.siteUrl,
         title: p.title,
         content: p.content,
+        contentHtml: marked.parse(p.content, { async: false }) as string,
         photoUrl: p.photoUrl,
     }));
 
