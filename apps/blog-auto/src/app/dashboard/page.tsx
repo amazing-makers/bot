@@ -2,13 +2,12 @@ import { redirect } from 'next/navigation';
 import dayjs from 'dayjs';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { getBalance } from '@/lib/credit';
 import { listAccounts } from '@/lib/blog-account';
 import { PostActions } from '@/components/PostActions';
 import {
-    AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box, Anchor, Paper,
+    AppShell, AppShellHeader, AppShellMain, Container, Title, Text, Stack, Group, Card, Badge, Button, SimpleGrid, ThemeIcon, Box, Anchor, Paper, Alert,
 } from '@mantine/core';
-import { IconArticle, IconPlus, IconCoin, IconWorldWww, IconExternalLink, IconCalendarEvent } from '@tabler/icons-react';
+import { IconArticle, IconPlus, IconKey, IconWorldWww, IconExternalLink, IconCalendarEvent, IconAlertTriangle } from '@tabler/icons-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,9 +26,8 @@ export default async function DashboardPage() {
     const userId = (session?.user as any)?.id;
     if (!userId) redirect('/login?callbackUrl=/dashboard');
 
-    const [accounts, balance, posts] = await Promise.all([
+    const [accounts, posts] = await Promise.all([
         listAccounts(userId),
-        getBalance(userId),
         prisma.blogPost.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
@@ -52,11 +50,11 @@ export default async function DashboardPage() {
                             </Anchor>
                         </Group>
                         <Group gap="md">
-                            <Badge variant="light" color="blue" size="lg" leftSection={<IconCoin size={14} />}>
-                                {balance.toLocaleString()} credits
-                            </Badge>
                             <Button component="a" href="/dashboard/calendar" size="xs" variant="subtle" color="blue" leftSection={<IconCalendarEvent size={14} />}>
                                 달력
+                            </Button>
+                            <Button component="a" href="/dashboard/settings/ai" size="xs" variant="subtle" color="blue" leftSection={<IconKey size={14} />}>
+                                AI키
                             </Button>
                             <Button component="a" href="/dashboard/accounts" size="xs" variant="subtle" color="blue" leftSection={<IconWorldWww size={14} />}>
                                 블로그 연결
@@ -69,6 +67,14 @@ export default async function DashboardPage() {
 
             <AppShellMain>
                 <Container size="xl">
+                    {accounts.some((a) => a.status !== 'ACTIVE') && (
+                        <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />} mb="lg" title="블로그 재연결이 필요합니다">
+                            <Group justify="space-between" align="center">
+                                <Text size="sm">일부 블로그의 인증이 만료/무효 상태입니다. 재연결 전까지 해당 블로그는 발행이 실패합니다.</Text>
+                                <Button component="a" href="/dashboard/accounts" size="xs" color="red" variant="filled">재연결하기</Button>
+                            </Group>
+                        </Alert>
+                    )}
                     <Group justify="space-between" mb="lg">
                         <Stack gap={2}>
                             <Title order={2}>대시보드</Title>

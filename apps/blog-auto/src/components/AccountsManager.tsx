@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import {
-    Card, Stack, Group, Text, Badge, Button, TextInput, PasswordInput, Paper, ThemeIcon, Box, Alert, Anchor,
+    Card, Stack, Group, Text, Badge, Button, TextInput, PasswordInput, Paper, ThemeIcon, Box, Alert, Anchor, List,
 } from '@mantine/core';
 import { IconWorldWww, IconTrash, IconPlus, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
@@ -103,13 +103,21 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountI
                 <Card withBorder p="lg" radius="md">
                     <form onSubmit={handleConnect}>
                         <Stack>
-                            <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />}>
-                                <Text size="xs">
-                                    <strong>Application Password 발급:</strong> WordPress 관리자 → 사용자 → 프로필 →
-                                    "Application Passwords" 섹션에서 새 비밀번호 생성 (24자). 일반 로그인 비밀번호가 아닙니다.
-                                    {' '}<Anchor href="https://wordpress.org/documentation/article/application-passwords/" target="_blank" rel="noreferrer" size="xs">가이드 ↗</Anchor>
-                                </Text>
-                            </Alert>
+                            <Paper withBorder p="md" radius="md" bg="blue.0">
+                                <Group gap={6} mb="xs">
+                                    <IconInfoCircle size={16} color="var(--mantine-color-blue-6)" />
+                                    <Text size="sm" fw={700}>처음이세요? WordPress 연결 4단계</Text>
+                                </Group>
+                                <List type="ordered" size="xs" spacing={6}>
+                                    <List.Item><b>사이트 주소 확인</b> — 워드프레스 블로그 주소(예: <Text span size="xs" c="dimmed">https://myblog.com</Text>)</List.Item>
+                                    <List.Item><b>WordPress 관리자 로그인</b> → 우측 상단 또는 좌측 메뉴 <Text span size="xs" c="dimmed">사용자 → 프로필</Text></List.Item>
+                                    <List.Item>
+                                        프로필 하단 <b>“Application Passwords”</b> 섹션에서 이름(예: amakers) 입력 → <b>새 비밀번호 추가</b> → 표시되는 <Text span size="xs" c="dimmed">24자(xxxx xxxx …)</Text> 복사 (일반 로그인 비번 아님!){' '}
+                                        <Anchor href="https://wordpress.org/documentation/article/application-passwords/" target="_blank" rel="noreferrer" size="xs">가이드 ↗</Anchor>
+                                    </List.Item>
+                                    <List.Item><b>아래에 사이트·사용자명·Application Password 붙여넣고 ‘연결하고 검증’</b></List.Item>
+                                </List>
+                            </Paper>
                             <TextInput
                                 label="사이트 URL"
                                 placeholder="https://myblog.com"
