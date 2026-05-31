@@ -2,8 +2,8 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@mantine/core';
-import { IconSend, IconRefresh } from '@tabler/icons-react';
+import { Button, Group } from '@mantine/core';
+import { IconSend, IconRefresh, IconPencil } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { publishPostAction } from '@/app/actions/posts';
 
@@ -18,7 +18,8 @@ export function PostActions({ postId, status }: { postId: string; status: string
     const [pending, startTransition] = useTransition();
 
     const cfg = LABEL[status];
-    if (!cfg) return null; // PUBLISHED/PUBLISHING 은 액션 없음
+    const editable = status === 'DRAFT' || status === 'SCHEDULED';
+    if (!cfg && !editable) return null; // PUBLISHED/PUBLISHING 은 액션 없음
 
     const run = () => {
         startTransition(async () => {
@@ -33,15 +34,31 @@ export function PostActions({ postId, status }: { postId: string; status: string
     };
 
     return (
-        <Button
-            size="xs"
-            variant="light"
-            color={cfg.color}
-            loading={pending}
-            leftSection={cfg.icon === 'send' ? <IconSend size={12} /> : <IconRefresh size={12} />}
-            onClick={run}
-        >
-            {cfg.text}
-        </Button>
+        <Group gap={4} wrap="nowrap">
+            {editable && (
+                <Button
+                    size="xs"
+                    variant="subtle"
+                    color="gray"
+                    component="a"
+                    href={`/dashboard/compose?edit=${postId}`}
+                    leftSection={<IconPencil size={12} />}
+                >
+                    수정
+                </Button>
+            )}
+            {cfg && (
+                <Button
+                    size="xs"
+                    variant="light"
+                    color={cfg.color}
+                    loading={pending}
+                    leftSection={cfg.icon === 'send' ? <IconSend size={12} /> : <IconRefresh size={12} />}
+                    onClick={run}
+                >
+                    {cfg.text}
+                </Button>
+            )}
+        </Group>
     );
 }

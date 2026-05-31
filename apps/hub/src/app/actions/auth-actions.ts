@@ -2,17 +2,13 @@
 
 import bcrypt from 'bcryptjs';
 import { prisma } from '@amakers/db';
-import { addCredits } from '@amakers/billing';
-
-/** 신규 가입 보너스 크레딧 (무료 체험). */
-const SIGNUP_BONUS = 100;
 
 export interface RegisterResult {
   ok: boolean;
   error?: string;
 }
 
-/** 회원가입 — 공유 User 테이블에 생성 + 가입 보너스 크레딧. 이후 client 가 signIn 호출. */
+/** 회원가입 — 공유 User 테이블에 무료 계정 생성. 이후 client 가 signIn 호출. */
 export async function registerUser(input: {
   email: string;
   password: string;
@@ -30,12 +26,8 @@ export async function registerUser(input: {
   if (existing) return { ok: false, error: '이미 가입된 이메일입니다. 로그인해 주세요.' };
 
   const hash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
+  await prisma.user.create({
     data: { email, password: hash, name },
-  });
-
-  await addCredits(user.id, SIGNUP_BONUS, 'adminbot', 'SUBSCRIPTION_GRANT', {
-    metadata: { reason: 'signup_bonus' },
   });
 
   return { ok: true };

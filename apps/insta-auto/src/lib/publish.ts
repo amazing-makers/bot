@@ -6,13 +6,12 @@
  *   - 재시도: publisher 단계별 transient 재시도 (publishers/instagram).
  *   - 토큰만료: isAuthError → 계정 PENDING_AUTH 전환 + 명확한 안내 (재연결 유도).
  *   - 가시성: attemptCount / lastAttemptAt / error 기록.
- *   - 크레딧: 발행 성공 시에만 차감.
+ *   - 발행은 무료 (AI 만 사용자 BYOK 키).
  */
 
 import { prisma } from './prisma';
 import { getAccountCredentials } from './instagram-account';
 import { publishToInstagram, isAuthError, type InstagramCredentials } from './publishers/instagram';
-import { spendCredits, CREDIT_RATES } from './credit';
 
 export interface PublishOutcome {
     ok: boolean;
@@ -65,15 +64,7 @@ async function executePublish(post: PostRow, creds: InstagramCredentials): Promi
             mediaType: post.mediaType === 'REELS' ? 'REELS' : 'IMAGE',
         });
 
-        const spend = await spendCredits(post.userId, {
-            amount: CREDIT_RATES.PUBLISH,
-            bot: 'instaauto',
-            action: 'PUBLISH',
-            refType: 'InstagramPost',
-            refId: post.id,
-            idempotent: true, // 같은 글 재발행/재시도 시 이중 차감 방지
-        });
-
+        // 발행은 무료 — 크레딧 차감 없음 (AI는 사용자 BYOK 키 사용).
         await prisma.instagramPost.update({
             where: { id: post.id },
             data: {
@@ -81,7 +72,6 @@ async function executePublish(post: PostRow, creds: InstagramCredentials): Promi
                 publishedAt: new Date(),
                 mediaId: result.mediaId,
                 permalink: result.permalink,
-                creditsUsed: spend.ok ? CREDIT_RATES.PUBLISH : 0,
                 error: null,
             },
         });

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import {
-    Card, Stack, Group, Text, Badge, Button, TextInput, Paper, ThemeIcon, Box, Alert, Anchor,
+    Card, Stack, Group, Text, Badge, Button, TextInput, Paper, ThemeIcon, Box, Alert, Anchor, List,
 } from '@mantine/core';
 import { IconBrandInstagram, IconTrash, IconPlus, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
@@ -103,13 +103,29 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountI
                 <Card withBorder p="lg" radius="md">
                     <form onSubmit={handleConnect}>
                         <Stack>
-                            <Alert variant="light" color="grape" icon={<IconInfoCircle size={16} />}>
-                                <Text size="xs">
-                                    <strong>토큰 발급:</strong> developers.facebook.com → 앱(Business) → Instagram Graph API + Facebook Login →
-                                    Access Token Tool 에서 Page Access Token 발급 (scope: instagram_basic, instagram_content_publish,
-                                    pages_show_list, pages_read_engagement) → <Anchor href="https://developers.facebook.com/tools/explorer" target="_blank" rel="noreferrer" size="xs">Graph API Explorer ↗</Anchor>
-                                </Text>
-                            </Alert>
+                            <Paper withBorder p="md" radius="md" bg="grape.0">
+                                <Group gap={6} mb="xs">
+                                    <IconInfoCircle size={16} color="var(--mantine-color-grape-6)" />
+                                    <Text size="sm" fw={700}>처음이세요? 토큰 연결 4단계</Text>
+                                </Group>
+                                <List type="ordered" size="xs" spacing={6}>
+                                    <List.Item>
+                                        <b>비즈니스/크리에이터 계정 확인</b> — 인스타 앱 → 설정 → 계정 → ‘프로페셔널 계정으로 전환’ + Facebook 페이지 연결 (개인 계정은 발행 불가)
+                                    </List.Item>
+                                    <List.Item>
+                                        <b>토큰 발급</b> —{' '}
+                                        <Anchor href="https://developers.facebook.com/tools/explorer" target="_blank" rel="noreferrer" size="xs">Graph API Explorer ↗</Anchor>
+                                        {' '}에서 앱 선택 → 권한 추가(<Text span size="xs" c="dimmed">instagram_basic, instagram_content_publish, pages_show_list, pages_read_engagement</Text>) → ‘Generate Access Token’
+                                    </List.Item>
+                                    <List.Item>
+                                        <b>Instagram User ID 확인</b> — 보통 <Text span size="xs" c="dimmed">17…</Text> 로 시작하는 긴 숫자({' '}
+                                        <Anchor href="https://developers.facebook.com/docs/instagram-api/getting-started" target="_blank" rel="noreferrer" size="xs">찾는 법 ↗</Anchor>)
+                                    </List.Item>
+                                    <List.Item>
+                                        <b>아래에 붙여넣고 ‘연결하고 검증’</b> — 토큰이 유효하면 계정 정보(이름·팔로워)를 자동으로 불러옵니다
+                                    </List.Item>
+                                </List>
+                            </Paper>
                             <TextInput
                                 label="Page Access Token"
                                 placeholder="EAAG..."
