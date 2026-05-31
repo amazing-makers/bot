@@ -7,13 +7,19 @@
  *      일시 실패는 FAILED 로 두고 사용자가 '재발행'.)
  *   - 인증 오류(401/403) → 계정 PENDING_AUTH 전환.
  *   - 가시성: attemptCount / lastAttemptAt / error.
- *   - 크레딧: 발행 성공 시에만 차감.
+ *   - 발행은 무료 (AI 만 사용자 BYOK 키).
+ *   - 본문은 마크다운으로 저장 → 발행 시 HTML 로 변환해 WordPress 전송.
  */
 
+import { marked } from 'marked';
 import { prisma } from './prisma';
 import { getWordPressCredentials } from './blog-account';
 import { publishToWordPress, type WordPressCredentials } from './publishers/wordpress';
-import { spendCredits, CREDIT_RATES } from './credit';
+
+/** 본문(마크다운)을 WordPress 용 HTML 로 변환. */
+function toHtml(markdown: string): string {
+    return marked.parse(markdown, { async: false }) as string;
+}
 
 export interface PublishOutcome {
     ok: boolean;
@@ -44,19 +50,12 @@ async function executePublish(post: PostRow, creds: WordPressCredentials): Promi
         const result = await publishToWordPress({
             credentials: creds,
             title: post.title,
-            content: post.content,
+            content: toHtml(post.content), // 마크다운 → HTML
             photoUrl: post.photoUrl ?? undefined,
             status: 'publish',
         });
 
-        const spend = await spendCredits(post.userId, {
-            amount: CREDIT_RATES.PUBLISH,
-            bot: 'naverblogauto',
-            action: 'PUBLISH',
-            refType: 'BlogPost',
-            refId: post.id,
-        });
-
+        // 발행은 무료 — 크레딧 차감 없음.
         await prisma.blogPost.update({
             where: { id: post.id },
             data: {
@@ -64,7 +63,6 @@ async function executePublish(post: PostRow, creds: WordPressCredentials): Promi
                 publishedAt: new Date(),
                 remotePostId: String(result.postId),
                 link: result.link,
-                creditsUsed: spend.ok ? CREDIT_RATES.PUBLISH : 0,
                 error: null,
             },
         });
