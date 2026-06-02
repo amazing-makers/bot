@@ -78,6 +78,12 @@ export default async function HubDashboard() {
         </Group>
       </a>
 
+      <Group mb="lg" gap="sm">
+        <Button component="a" href="/automations" variant="light" color="grape" leftSection={<IconBolt size={16} />}>
+          반복 자동화 — "3시간마다 자동 발행" 같은 작업 설정
+        </Button>
+      </Group>
+
       {!hasKey && (
         <Group mb="lg">
           <Button

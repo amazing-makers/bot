@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
 import { runAgent, generateBlogPost, generateImage, type AgentToolDef } from '@amakers/ai';
 import { publishToChannels, type PublishToChannelsInput, type PublishResult } from './multi-publish';
+import { createAutomation, listAutomations } from './automations';
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -42,6 +43,23 @@ const TOOLS: AgentToolDef[] = [
       tistoryIds: '티스토리 계정 id 배열',
     },
   },
+  {
+    name: 'create_automation',
+    description: '반복 자동화를 만든다(예: "3시간마다 ~ 자동 발행"). 주기마다 AI가 글·이미지를 생성해 선택 채널에 자동 발행. 만들기 전에 list_accounts 로 계정 id 를 확보한다.',
+    params: {
+      name: '자동화 이름(예: "3시간마다 강아지 인스타")',
+      intervalMinutes: '실행 주기(분). 예: 3시간=180, 하루=1440',
+      topic: 'AI가 생성할 글 주제(필수)',
+      tone: 'info|guide|review|friendly (선택)',
+      length: 'short|medium|long (선택)',
+      imagePrompt: '이미지 생성용 설명(선택, 없으면 topic 사용)',
+      instaIds: '인스타 계정 id 배열',
+      blogIds: '블로그 계정 id 배열',
+      tistoryIds: '티스토리 계정 id 배열',
+      startNow: '첫 실행을 지금 바로 할지(true/false, 기본 false)',
+    },
+  },
+  { name: 'list_automations', description: '내가 만든 반복 자동화 목록(이름/주기/상태)을 가져온다.' },
 ];
 
 function buildExecute(userId: string) {
@@ -93,6 +111,38 @@ function buildExecute(userId: string) {
         const total = proposal.instaIds.length + proposal.blogIds.length + proposal.tistoryIds.length;
         if (total === 0) return { ok: false, error: '유효한 대상 계정이 없습니다. list_accounts 의 id 를 사용하세요.' };
         return { ok: true, proposal };
+      }
+      case 'create_automation': {
+        const config = {
+          source: {
+            kind: 'ai' as const,
+            topic: String(args?.topic || ''),
+            tone: args?.tone,
+            length: args?.length,
+            withImage: arr(args?.instaIds).length > 0,
+            imagePrompt: args?.imagePrompt ? String(args.imagePrompt) : undefined,
+          },
+          channels: { instaIds: arr(args?.instaIds), blogIds: arr(args?.blogIds), tistoryIds: arr(args?.tistoryIds) },
+        };
+        const r = await createAutomation({
+          name: String(args?.name || '자동 발행'),
+          intervalMinutes: Number(args?.intervalMinutes) || 180,
+          config,
+          startNow: !!args?.startNow,
+        });
+        return r.ok
+          ? { ok: true, id: r.id, message: '자동화를 만들었어요. /automations 에서 관리할 수 있어요.' }
+          : { ok: false, error: r.error };
+      }
+      case 'list_automations': {
+        const items = await listAutomations();
+        return {
+          ok: true,
+          automations: items.map((a) => ({
+            id: a.id, name: a.name, status: a.status, intervalMinutes: a.intervalMinutes,
+            nextRunAt: a.nextRunAt, lastStatus: a.lastStatus,
+          })),
+        };
       }
     }
     return { ok: false, error: '알 수 없는 도구: ' + name };
