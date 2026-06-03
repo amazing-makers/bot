@@ -2,7 +2,8 @@
 
 import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
-import { runAgent, generateBlogPost, generateImage, type AgentToolDef } from '@amakers/ai';
+import { runAgent, generateBlogPost, type AgentToolDef } from '@amakers/ai';
+import { generateImageHosted } from '@/lib/image-hosted';
 import { publishToChannels, type PublishToChannelsInput, type PublishResult } from './multi-publish';
 import { createAutomation, listAutomations } from './automations';
 
@@ -91,7 +92,7 @@ function buildExecute(userId: string) {
         return r.ok ? { ok: true, title: r.title, markdown: r.markdown } : { ok: false, error: r.error };
       }
       case 'generate_image': {
-        const r = await generateImage(String(args?.prompt || ''), args?.ratio || 'square');
+        const r = await generateImageHosted(userId, String(args?.prompt || ''), args?.ratio || 'square');
         return r.ok ? { ok: true, url: r.url } : { ok: false, error: r.error };
       }
       case 'propose_publish': {

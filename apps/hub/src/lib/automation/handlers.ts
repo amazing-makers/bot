@@ -3,8 +3,9 @@
  * 엔진(run.ts)이 automation.type 으로 핸들러를 찾아 실행한다.
  */
 
-import { generateBlogPost, generateImage, deriveCaption } from '@amakers/ai';
+import { generateBlogPost, deriveCaption } from '@amakers/ai';
 import { prisma } from '@amakers/db';
+import { generateImageHosted } from '@/lib/image-hosted';
 import { publishForUser } from '@/lib/publish-core';
 import { fetchFeedItems } from './rss';
 import type { AutomationHandler, AutomationTypeMeta, RunResult, ScheduledPublishConfig } from './types';
@@ -28,7 +29,7 @@ async function produceContent(
     if (!post.ok) return { ok: false, error: post.error || 'AI 글 생성 실패' };
     let imageUrl: string | undefined;
     if (needImage || src.withImage) {
-      const img = await generateImage(src.imagePrompt?.trim() || src.topic, 'square');
+      const img = await generateImageHosted(userId, src.imagePrompt?.trim() || src.topic, 'square');
       if (img.ok) imageUrl = img.url;
       else if (needImage) return { ok: false, error: '이미지 생성 실패: ' + (img.error || '') };
     }
@@ -63,7 +64,7 @@ async function produceContent(
     if (newest.link) body = `${body}\n\n원문: ${newest.link}`;
     let imageUrl: string | undefined;
     if (needImage) {
-      const img = await generateImage(newest.title || title, 'square');
+      const img = await generateImageHosted(userId, newest.title || title, 'square');
       if (img.ok) imageUrl = img.url;
       else return { ok: false, error: '이미지 생성 실패: ' + (img.error || '') };
     }

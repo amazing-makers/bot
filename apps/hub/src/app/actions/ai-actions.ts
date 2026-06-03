@@ -1,7 +1,8 @@
 'use server';
 
 import { auth } from '@/auth';
-import { generateBlogPost, generateImage, type BlogTone, type BlogLength, type ImageRatio } from '@amakers/ai';
+import { generateBlogPost, type BlogTone, type BlogLength, type ImageRatio } from '@amakers/ai';
+import { generateImageHosted } from '@/lib/image-hosted';
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -16,8 +17,8 @@ export async function generateBlogPostAction(topic: string, tone: BlogTone = 'in
   return generateBlogPost(userId, { topic, tone, length });
 }
 
-/** AI 이미지 생성 (Pollinations 무료) → 공개 URL. */
+/** AI 이미지 생성 (BYOK Gemini → Blob) → 공개 URL. */
 export async function generateImageAction(prompt: string, ratio: ImageRatio = 'landscape') {
-  await requireUserId();
-  return generateImage(prompt, ratio);
+  const userId = await requireUserId();
+  return generateImageHosted(userId, prompt, ratio);
 }
