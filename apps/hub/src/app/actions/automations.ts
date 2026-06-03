@@ -120,6 +120,92 @@ export async function createAutomation(input: CreateAutomationInput): Promise<{ 
   return { ok: true, id: created.id };
 }
 
+export interface UpdateAutomationInput {
+  id: string;
+  name: string;
+  scheduleKind?: 'interval' | 'daily';
+  intervalMinutes?: number;
+  dailyTime?: string;
+  config: ScheduledPublishConfig;
+}
+
+/** 기존 자동화 수정(소유 검증). 스케줄 변경 시 다음 실행시각 재계산. */
+export async function updateAutomation(input: UpdateAutomationInput): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireUserId();
+  const owned = await prisma.automation.findFirst({ where: { id: input.id, userId }, select: { id: true } });
+  if (!owned) return { ok: false, error: '자동화를 찾을 수 없습니다' };
+
+  const name = (input.name || '').trim();
+  if (!name) return { ok: false, error: '이름을 입력하세요' };
+
+  const scheduleKind = input.scheduleKind === 'daily' ? 'daily' : 'interval';
+  let interval = 0;
+  let dailyTime: string | null = null;
+  if (scheduleKind === 'daily') {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((input.dailyTime || '').trim());
+    if (!m) return { ok: false, error: '매일 실행할 시각을 HH:MM 형식으로 입력하세요' };
+    dailyTime = `${String(Math.min(23, parseInt(m[1], 10))).padStart(2, '0')}:${String(Math.min(59, parseInt(m[2], 10))).padStart(2, '0')}`;
+  } else {
+    interval = Math.max(5, Math.floor(input.intervalMinutes || 0));
+    if (!interval) return { ok: false, error: '실행 주기를 입력하세요(분)' };
+  }
+
+  const err = validateChannels(input.config);
+  if (err) return { ok: false, error: err };
+
+  const ch = input.config.channels;
+  const [insta, blog, tistory] = await Promise.all([
+    ch.instaIds?.length ? prisma.instagramAccount.findMany({ where: { id: { in: ch.instaIds }, userId }, select: { id: true } }) : [],
+    ch.blogIds?.length ? prisma.blogAccount.findMany({ where: { id: { in: ch.blogIds }, userId }, select: { id: true } }) : [],
+    ch.tistoryIds?.length ? prisma.tistoryAccount.findMany({ where: { id: { in: ch.tistoryIds }, userId }, select: { id: true } }) : [],
+  ]);
+  const config: ScheduledPublishConfig = {
+    ...input.config,
+    channels: { instaIds: insta.map((a) => a.id), blogIds: blog.map((a) => a.id), tistoryIds: tistory.map((a) => a.id) },
+  };
+  if ((config.channels.instaIds!.length + config.channels.blogIds!.length + config.channels.tistoryIds!.length) === 0) {
+    return { ok: false, error: '본인 계정인 채널이 없습니다' };
+  }
+
+  const now = new Date();
+  const nextRunAt = computeNext(now, { scheduleKind, intervalMinutes: interval || null, cronExpr: dailyTime });
+
+  await prisma.automation.update({
+    where: { id: input.id },
+    data: {
+      name,
+      scheduleKind,
+      intervalMinutes: scheduleKind === 'interval' ? interval : null,
+      cronExpr: dailyTime,
+      config: config as any,
+      nextRunAt,
+    },
+  });
+  revalidatePath('/automations');
+  return { ok: true };
+}
+
+export interface HubStats {
+  activeAutomations: number;
+  runSuccess: number;
+  runFailed: number;
+  posts: { instagram: number; blog: number; tistory: number };
+}
+
+/** 허브 발행/자동화 요약 통계. */
+export async function getStats(): Promise<HubStats> {
+  const userId = await requireUserId();
+  const [activeAutomations, runSuccess, runFailed, instagram, blog, tistory] = await Promise.all([
+    prisma.automation.count({ where: { userId, status: 'ACTIVE' } }),
+    prisma.automationRun.count({ where: { userId, status: 'SUCCESS' } }),
+    prisma.automationRun.count({ where: { userId, status: 'FAILED' } }),
+    prisma.instagramPost.count({ where: { userId } }),
+    prisma.blogPost.count({ where: { userId } }),
+    prisma.tistoryPost.count({ where: { userId } }),
+  ]);
+  return { activeAutomations, runSuccess, runFailed, posts: { instagram, blog, tistory } };
+}
+
 export async function listAutomations(): Promise<AutomationListItem[]> {
   const userId = await requireUserId();
   const rows = await prisma.automation.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });

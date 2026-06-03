@@ -7,12 +7,12 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
-  IconPlus, IconPlayerPlay, IconTrash, IconPlayerPause, IconBolt, IconClock, IconAlertCircle, IconHistory, IconPhoto,
+  IconPlus, IconPlayerPlay, IconTrash, IconPlayerPause, IconBolt, IconClock, IconAlertCircle, IconHistory, IconPhoto, IconPencil,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { ImageUpload } from '@/components/ImageUpload';
 import {
-  createAutomation, setAutomationPaused, deleteAutomation, runAutomationNow, getAutomationRuns,
+  createAutomation, updateAutomation, setAutomationPaused, deleteAutomation, runAutomationNow, getAutomationRuns,
   type AutomationListItem, type AutomationRunItem,
 } from '@/app/actions/automations';
 
@@ -54,6 +54,7 @@ function scheduleLabel(it: AutomationListItem): string {
 export function AutomationsManager({ accounts, initial }: { accounts: Accounts; initial: AutomationListItem[] }) {
   const [items, setItems] = useState<AutomationListItem[]>(initial);
   const [showForm, setShowForm] = useState(initial.length === 0);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   // ── 폼 상태 ──
@@ -103,6 +104,29 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
     notifications.show({ message: `${urls.length}개 항목 추가됨`, color: 'teal' });
   }
 
+  function resetForm() {
+    setEditingId(null);
+    setName(''); setTopic(''); setImagePrompt(''); setUploads([]); setBulkUrls(''); setFeedUrl('');
+    setInsta([]); setBlog([]); setTistory([]); setStartNow(false);
+    setScheduleKind('interval'); setInterval(180); setDailyTime('09:00'); setSourceKind('ai'); setRewriteWithAI(true);
+  }
+
+  function startEdit(it: AutomationListItem) {
+    const src = (it.config?.source || {}) as any;
+    const ch = (it.config?.channels || {}) as any;
+    setEditingId(it.id);
+    setName(it.name);
+    setScheduleKind(it.scheduleKind === 'daily' ? 'daily' : 'interval');
+    if (it.scheduleKind === 'daily') setDailyTime(it.dailyTime || '09:00');
+    else setInterval(it.intervalMinutes || 180);
+    setSourceKind(src.kind || 'ai');
+    setTopic(src.topic || ''); setTone(src.tone || 'info'); setLength(src.length || 'medium'); setImagePrompt(src.imagePrompt || '');
+    setUploads(Array.isArray(src.items) ? src.items : []);
+    setFeedUrl(src.feedUrl || ''); setRewriteWithAI(src.rewriteWithAI !== false);
+    setInsta(ch.instaIds || []); setBlog(ch.blogIds || []); setTistory(ch.tistoryIds || []);
+    setShowForm(true);
+  }
+
   async function submit() {
     if (!name.trim()) return notifications.show({ message: '이름을 입력하세요', color: 'red' });
     if (insta.length + blog.length + tistory.length === 0) return notifications.show({ message: '채널을 1개 이상 선택하세요', color: 'red' });
@@ -120,17 +144,19 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
             : sourceKind === 'local'
               ? { kind: 'local' as const }
               : { kind: 'uploaded' as const, items: uploads, cursor: 0 };
-      const r = await createAutomation({
+      const payload = {
         name: name.trim(),
         scheduleKind,
         intervalMinutes: scheduleKind === 'interval' ? interval : undefined,
         dailyTime: scheduleKind === 'daily' ? dailyTime : undefined,
-        startNow,
         config: { source, channels: { instaIds: insta, blogIds: blog, tistoryIds: tistory } },
-      });
+      };
+      const r = editingId
+        ? await updateAutomation({ id: editingId, ...payload })
+        : await createAutomation({ ...payload, startNow });
       if (r.ok) {
-        notifications.show({ title: '자동화 생성', message: '정해진 일정마다 자동 발행됩니다 🤖', color: 'teal' });
-        setName(''); setTopic(''); setImagePrompt(''); setUploads([]); setBulkUrls(''); setFeedUrl(''); setInsta([]); setBlog([]); setTistory([]); setStartNow(false);
+        notifications.show({ title: editingId ? '수정 완료' : '자동화 생성', message: editingId ? '변경사항이 저장됐어요' : '정해진 일정마다 자동 발행됩니다 🤖', color: 'teal' });
+        resetForm();
         setShowForm(false);
         await refresh();
       } else {
@@ -181,7 +207,12 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
     <Stack>
       <Group justify="space-between">
         <Text fw={600}>내 자동화 ({items.length})</Text>
-        <Button size="xs" variant={showForm ? 'subtle' : 'light'} leftSection={<IconPlus size={16} />} onClick={() => setShowForm((v) => !v)}>
+        <Button
+          size="xs"
+          variant={showForm ? 'subtle' : 'light'}
+          leftSection={<IconPlus size={16} />}
+          onClick={() => { if (showForm) { setShowForm(false); resetForm(); } else { resetForm(); setShowForm(true); } }}
+        >
           {showForm ? '접기' : '새 자동화'}
         </Button>
       </Group>
@@ -296,10 +327,13 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
             {accounts.tistory.length > 0 && (
               <MultiSelect label="티스토리" data={accounts.tistory.map((a) => ({ value: a.id, label: a.label }))} value={tistory} onChange={setTistory} placeholder="계정 선택" />
             )}
-            <Switch label="첫 실행을 지금 바로" checked={startNow} onChange={(e) => setStartNow(e.currentTarget.checked)} />
-            <Button leftSection={<IconBolt size={16} />} loading={saving} onClick={submit} disabled={!hasAnyAccount}>
-              자동화 만들기
-            </Button>
+            {!editingId && <Switch label="첫 실행을 지금 바로" checked={startNow} onChange={(e) => setStartNow(e.currentTarget.checked)} />}
+            <Group>
+              <Button leftSection={<IconBolt size={16} />} loading={saving} onClick={submit} disabled={!hasAnyAccount}>
+                {editingId ? '수정 저장' : '자동화 만들기'}
+              </Button>
+              {editingId && <Button variant="default" onClick={() => { resetForm(); setShowForm(false); }}>취소</Button>}
+            </Group>
           </Stack>
         </Paper>
       )}
@@ -330,6 +364,7 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                 {it.lastError && <Text size="xs" c="red" mt={4} lineClamp={2}>오류: {it.lastError}</Text>}
               </Box>
               <Group gap={6} wrap="nowrap">
+                <ActionIcon variant="light" color="blue" onClick={() => startEdit(it)} title="수정"><IconPencil size={16} /></ActionIcon>
                 <ActionIcon variant="light" color="grape" onClick={() => openHistory(it)} title="실행 이력"><IconHistory size={16} /></ActionIcon>
                 <ActionIcon variant="light" color="blue" onClick={() => runNow(it)} loading={pending} title="지금 실행"><IconPlayerPlay size={16} /></ActionIcon>
                 <ActionIcon variant="light" color="gray" onClick={() => togglePause(it)} loading={pending} title={it.status === 'ACTIVE' ? '일시정지' : '재개'}><IconPlayerPause size={16} /></ActionIcon>
