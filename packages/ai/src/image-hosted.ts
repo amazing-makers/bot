@@ -33,6 +33,32 @@ async function uploadToBlob(userId: string, buf: Buffer, mime: string): Promise<
   return blob.url;
 }
 
+/** Cloudflare Workers AI (FLUX.1-schnell, 무료 티어). CF_ACCOUNT_ID + CF_AI_TOKEN 필요. */
+async function tryCloudflare(userId: string, prompt: string): Promise<HostedImageResult | null> {
+  const acct = process.env.CF_ACCOUNT_ID;
+  const token = process.env.CF_AI_TOKEN;
+  if (!acct || !token) return null;
+  try {
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acct}/ai/run/@cf/black-forest-labs/flux-1-schnell`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, steps: 4 }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!r.ok) {
+      const b = (await r.text()).slice(0, 200).replace(/\s+/g, ' ');
+      return { ok: false, error: `Cloudflare ${r.status}: ${b.slice(0, 130)}` };
+    }
+    const j = await r.json();
+    const b64 = j?.result?.image;
+    if (!b64) return { ok: false, error: 'Cloudflare 이미지 응답 없음' };
+    const buf = Buffer.from(b64, 'base64');
+    return { ok: true, url: await uploadToBlob(userId, buf, 'image/jpeg') };
+  } catch (e: any) {
+    return { ok: false, error: e?.name === 'TimeoutError' ? '이미지 생성 시간 초과 — 다시 시도하세요.' : (e?.message || 'Cloudflare 오류') };
+  }
+}
+
 async function tryPollinations(userId: string, prompt: string, ratio: ImageRatio): Promise<HostedImageResult | null> {
   const token = process.env.POLLINATIONS_TOKEN;
   if (!token) return null;
@@ -86,11 +112,13 @@ export async function generateImageHosted(userId: string, prompt: string, ratio:
   if (!p) return { ok: false, error: '이미지 설명을 입력하세요' };
   if (!process.env.BLOB_READ_WRITE_TOKEN) return { ok: false, error: '이미지 저장소(Blob)가 설정되지 않았습니다.' };
 
+  const cf = await tryCloudflare(userId, p);
+  if (cf?.ok) return cf;
   const pol = await tryPollinations(userId, p, ratio);
   if (pol?.ok) return pol;
   const gem = await tryGemini(userId, p, ratio);
   if (gem?.ok) return gem;
 
-  // 둘 다 실패 — 가장 의미있는 에러 반환
-  return pol || gem || { ok: false, error: 'AI 이미지 생성을 사용할 수 없어요. 관리자에게 Pollinations 토큰 설정을 요청하세요. (지금은 사진 직접 업로드를 사용하세요.)' };
+  // 전부 실패 — 가장 의미있는 에러 반환
+  return cf || pol || gem || { ok: false, error: 'AI 이미지 생성이 아직 설정되지 않았어요. 지금은 사진 직접 업로드를 사용하세요.' };
 }
