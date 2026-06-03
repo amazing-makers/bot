@@ -60,7 +60,7 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
   const [scheduleKind, setScheduleKind] = useState<'interval' | 'daily'>('interval');
   const [interval, setInterval] = useState<number>(180);
   const [dailyTime, setDailyTime] = useState('09:00');
-  const [sourceKind, setSourceKind] = useState<'ai' | 'uploaded' | 'rss'>('ai');
+  const [sourceKind, setSourceKind] = useState<'ai' | 'uploaded' | 'rss' | 'local'>('ai');
   const [topic, setTopic] = useState('');
   const [tone, setTone] = useState<string>('info');
   const [length, setLength] = useState<string>('medium');
@@ -116,7 +116,9 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
           ? { kind: 'ai' as const, topic: topic.trim(), tone: tone as any, length: length as any, withImage: insta.length > 0, imagePrompt: imagePrompt.trim() || undefined }
           : sourceKind === 'rss'
             ? { kind: 'rss' as const, feedUrl: feedUrl.trim(), rewriteWithAI }
-            : { kind: 'uploaded' as const, items: uploads, cursor: 0 };
+            : sourceKind === 'local'
+              ? { kind: 'local' as const }
+              : { kind: 'uploaded' as const, items: uploads, cursor: 0 };
       const r = await createAutomation({
         name: name.trim(),
         scheduleKind,
@@ -223,7 +225,7 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                 fullWidth size="xs"
                 value={sourceKind}
                 onChange={(v) => setSourceKind(v as any)}
-                data={[{ label: 'AI 생성', value: 'ai' }, { label: '내가 올린 항목', value: 'uploaded' }, { label: 'RSS 피드', value: 'rss' }]}
+                data={[{ label: 'AI 생성', value: 'ai' }, { label: '내가 올린 항목', value: 'uploaded' }, { label: 'RSS 피드', value: 'rss' }, { label: '로컬(데스크톱)', value: 'local' }]}
               />
             </Box>
 
@@ -272,6 +274,12 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                   <TextInput size="xs" label="피드 주소" placeholder="https://블로그/feed 또는 .../rss" value={feedUrl} onChange={(e) => setFeedUrl(e.currentTarget.value)} />
                   <Switch size="sm" label="AI로 SNS용 재작성(권장)" checked={rewriteWithAI} onChange={(e) => setRewriteWithAI(e.currentTarget.checked)} />
                 </Stack>
+              </Paper>
+            )}
+
+            {sourceKind === 'local' && (
+              <Paper withBorder radius="sm" p="sm" bg="var(--mantine-color-gray-0)">
+                <Text size="xs" c="dimmed">위 "데스크톱 연결"에서 에이전트를 실행하고 폴더에 사진을 넣으면, 매 회차 올라온 사진을 하나씩 발행합니다. 별도 입력은 없습니다.</Text>
               </Paper>
             )}
 

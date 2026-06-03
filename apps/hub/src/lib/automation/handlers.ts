@@ -4,6 +4,7 @@
  */
 
 import { generateBlogPost, generateImage, deriveCaption } from '@amakers/ai';
+import { prisma } from '@amakers/db';
 import { publishForUser } from '@/lib/publish-core';
 import { fetchFeedItems } from './rss';
 import type { AutomationHandler, AutomationTypeMeta, RunResult, ScheduledPublishConfig } from './types';
@@ -79,7 +80,19 @@ async function produceContent(
     };
   }
 
-  // drive / local — 확장 지점(추후 연동). 지금은 건너뜀.
+  if (src.kind === 'local') {
+    // 데스크톱 에이전트가 올린 드롭 큐에서 가장 오래된 PENDING 1건 소비.
+    const drop = await prisma.agentDropItem.findFirst({
+      where: { userId, status: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!drop) return { ok: false, skip: true, error: '데스크톱에서 올라온 대기 항목이 없습니다' };
+    await prisma.agentDropItem.update({ where: { id: drop.id }, data: { status: 'USED', usedAt: new Date() } });
+    const cap = (drop.caption || '').trim();
+    return { ok: true, title: cap || drop.source || '새 사진', body: cap, imageUrl: drop.imageUrl, caption: cap || undefined };
+  }
+
+  // drive — 확장 지점(추후 연동). 지금은 건너뜀.
   return { ok: false, skip: true, error: `'${src.kind}' 소스는 곧 지원됩니다(연동 준비중)` };
 }
 

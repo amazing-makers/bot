@@ -5,6 +5,8 @@ import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
 import { listAutomations } from '@/app/actions/automations';
 import { AutomationsManager } from '@/components/AutomationsManager';
+import { DesktopConnect } from '@/components/DesktopConnect';
+import { getOrCreateDesktopToken } from '@/lib/agent-token';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +15,13 @@ export default async function AutomationsPage() {
   if (!session?.user) redirect('/login');
   const userId = (session.user as any).id as string;
 
-  const [insta, blog, tistory, items] = await Promise.all([
+  const [insta, blog, tistory, items, desktopToken, pendingDrops] = await Promise.all([
     prisma.instagramAccount.findMany({ where: { userId }, select: { id: true, username: true } }),
     prisma.blogAccount.findMany({ where: { userId }, select: { id: true, username: true, siteUrl: true } }),
     prisma.tistoryAccount.findMany({ where: { userId }, select: { id: true, username: true, siteUrl: true } }),
     listAutomations(),
+    getOrCreateDesktopToken(userId),
+    prisma.agentDropItem.count({ where: { userId, status: 'PENDING' } }),
   ]);
 
   const accounts = {
@@ -39,6 +43,7 @@ export default async function AutomationsPage() {
         </div>
       </Group>
       <Stack mt="lg">
+        <DesktopConnect initialToken={desktopToken} pending={pendingDrops} />
         <AutomationsManager accounts={accounts} initial={items} />
       </Stack>
     </Container>
