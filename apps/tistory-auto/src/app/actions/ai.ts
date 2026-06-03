@@ -2,10 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import { generateImage, type ImageRatio } from '@/lib/ai/image-gen';
+import { type ImageRatio } from '@/lib/ai/image-gen';
 import { generateBlogPost, type BlogTone, type BlogLength } from '@/lib/ai/writer';
 import { saveUserApiKey, deleteUserApiKey, listUserApiKeys, type AiProvider, AI_PROVIDERS } from '@/lib/api-keys';
-import { validateApiKey } from '@amakers/ai';
+import { validateApiKey, generateImageHosted } from '@amakers/ai';
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -14,10 +14,10 @@ async function requireUserId(): Promise<string> {
   return userId;
 }
 
-/** AI 이미지 생성 (Pollinations 무료) → 공개 URL. */
+/** AI 이미지 생성 (BYOK Gemini → Blob) → 공개 URL. */
 export async function generateImageAction(prompt: string, ratio: ImageRatio = 'square') {
-  await requireUserId();
-  return generateImage(prompt, ratio);
+  const userId = await requireUserId();
+  return generateImageHosted(userId, prompt, ratio);
 }
 
 /** AI 블로그 글 생성 (BYOK Gemini/Groq) → 제목 + 마크다운 본문. */

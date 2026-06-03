@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@amakers/db": "*"
+    "@amakers/db": "*",
+    "@vercel/blob": "^2.4.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0"
