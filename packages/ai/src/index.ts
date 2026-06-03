@@ -24,3 +24,13 @@ export { validateApiKey, type ValidateResult } from './validate';
 export { generateBlogPost, type WriterInput, type WriterResult, type BlogTone, type BlogLength } from './writer';
 export { generateImage, buildPollinationsUrl, IMAGE_RATIOS, type ImageRatio, type GenerateImageResult } from './image';
 export { stripMarkdown, deriveCaption } from './caption';
+
+// 도구 사용(tool-use) 에이전트 — 허브 AI 채팅
+export { chatComplete, type ChatMessage, type ChatCompleteInput } from './llm';
+export {
+  runAgent,
+  type AgentToolDef,
+  type AgentEvent,
+  type RunAgentOptions,
+  type RunAgentResult,
+} from './agent';

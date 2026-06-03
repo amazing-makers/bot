@@ -7,6 +7,7 @@ import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
 import { ToolGrid } from '@/components/ToolGrid';
 import { SignOutButton } from '@/components/SignOutButton';
+import { AgentChat } from '@/components/AgentChat';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,8 +49,11 @@ export default async function HubDashboard() {
       {/* 인사 */}
       <Stack gap={4} mb="lg">
         <Title order={2}>안녕하세요, {displayName}님 👋</Title>
-        <Text c="dimmed">사용할 자동화 도구를 선택하세요. 모든 도구는 기본 무료이며, AI는 내 API 키로 동작합니다.</Text>
+        <Text c="dimmed">말로 시키면 AI 비서가 알아서 해드려요. 또는 아래 도구를 직접 선택하세요. 모든 도구는 기본 무료이며, AI는 내 API 키로 동작합니다.</Text>
       </Stack>
+
+      {/* AI 비서 채팅 — 첫 화면 핵심 */}
+      <AgentChat hasKey={hasKey} />
 
       {/* 1작성 → 다채널 CTA */}
       <a href="/compose" style={{ textDecoration: 'none', display: 'block', marginBottom: 'var(--mantine-spacing-lg)' }}>
@@ -73,6 +77,12 @@ export default async function HubDashboard() {
           <IconArrowRight size={22} color="white" />
         </Group>
       </a>
+
+      <Group mb="lg" gap="sm">
+        <Button component="a" href="/automations" variant="light" color="grape" leftSection={<IconBolt size={16} />}>
+          반복 자동화 — "3시간마다 자동 발행" 같은 작업 설정
+        </Button>
+      </Group>
 
       {!hasKey && (
         <Group mb="lg">

@@ -87,6 +87,10 @@ model User {
   tistoryAccounts    TistoryAccount[]
   tistoryPosts       TistoryPost[]
   tistoryAgentTokens TistoryAgentToken[]
+
+  // ── 자동화 엔진 ─────────────────────────────────────────
+  automations    Automation[]
+  automationRuns AutomationRun[]
 }
 
 // Phase 50 — 같은 PC 에서 한 번 비밀번호로 인증한 계정은 7일간 비번 없이 전환 허용.
@@ -970,4 +974,50 @@ model TistoryAgentToken {
 
   @@index([userId])
   @@map("TistoryAgentToken")
+}
+
+// ── 자동화 엔진 (확장형) ──────────────────────────────────
+// 어떤 자동화든 type(핸들러 키) + config(JSON)로 표현. 새 자동화 = 핸들러만 등록.
+model Automation {
+  id              String    @id @default(cuid())
+  userId          String
+  name            String
+  type            String // 핸들러 키 (예: 'scheduled_publish')
+  status          String    @default("ACTIVE") // ACTIVE | PAUSED
+  scheduleKind    String    @default("interval") // interval | cron | once
+  intervalMinutes Int? // scheduleKind=interval 일 때
+  cronExpr        String? // scheduleKind=cron 일 때(후속)
+  config          Json // 액션별 파라미터(소스/채널/주제 등)
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  lastStatus      String? // SUCCESS | FAILED | SKIPPED
+  lastError       String?
+  runCount        Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs AutomationRun[]
+
+  @@index([status, nextRunAt])
+  @@index([userId])
+  @@map("Automation")
+}
+
+model AutomationRun {
+  id           String    @id @default(cuid())
+  automationId String
+  userId       String
+  status       String // SUCCESS | FAILED | SKIPPED
+  summary      String?
+  error        String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+  @@index([userId])
+  @@map("AutomationRun")
 }
