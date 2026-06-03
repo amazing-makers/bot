@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Paper, Stack, Group, Text, Textarea, Button, ScrollArea, Loader, Image, Badge, Box, ThemeIcon, Alert, Anchor,
 } from '@mantine/core';
-import { IconSparkles, IconSend, IconRobot, IconUser, IconKey, IconRocket, IconPhoto } from '@tabler/icons-react';
+import { IconSparkles, IconSend, IconRobot, IconUser, IconKey, IconRocket, IconPhoto, IconX } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { agentChat, confirmPublish } from '@/app/actions/agent-chat';
+import { ImageUpload } from '@/components/ImageUpload';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -23,6 +24,7 @@ export function AgentChat({ hasKey }: { hasKey: boolean }) {
   const [draft, setDraft] = useState<{ title?: string; markdown?: string; imageUrl?: string } | null>(null);
   const [proposal, setProposal] = useState<any | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [attached, setAttached] = useState<string>('');
   const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function AgentChat({ hasKey }: { hasKey: boolean }) {
     setInput('');
     setLoading(true);
     try {
-      const res = await agentChat(history);
+      const res = await agentChat(history, attached || undefined);
       if (!res.ok) {
         setMessages([...history, { role: 'assistant', content: `⚠️ ${res.error || 'AI 오류가 발생했어요.'}` }]);
       } else {
@@ -175,7 +177,19 @@ export function AgentChat({ hasKey }: { hasKey: boolean }) {
             </Stack>
           </ScrollArea>
 
-          <Group gap="xs" mt="sm" align="flex-end" wrap="nowrap">
+          <Group gap="xs" mt="sm" align="center">
+            {attached ? (
+              <Group gap={6}>
+                <Image src={attached} w={40} h={40} radius="sm" fit="cover" alt="첨부" />
+                <Text size="xs" c="dimmed">사진 첨부됨 — AI가 이 사진으로 발행</Text>
+                <ThemeIcon variant="subtle" color="gray" size="sm" style={{ cursor: 'pointer' }} onClick={() => setAttached('')}><IconX size={14} /></ThemeIcon>
+              </Group>
+            ) : (
+              <ImageUpload label="사진 첨부" multiple={false} onUploaded={(url) => setAttached(url)} />
+            )}
+          </Group>
+
+          <Group gap="xs" mt={6} align="flex-end" wrap="nowrap">
             <Textarea
               flex={1}
               autosize

@@ -174,11 +174,19 @@ export interface AgentChatResult {
   error?: string;
 }
 
-/** 허브 AI 채팅 — 도구 사용 에이전트 한 번 실행. history 의 마지막이 새 사용자 메시지. */
-export async function agentChat(history: { role: 'user' | 'assistant'; content: string }[]): Promise<AgentChatResult> {
+/** 허브 AI 채팅 — 도구 사용 에이전트 한 번 실행. history 의 마지막이 새 사용자 메시지.
+ *  attachedImageUrl: 사용자가 첨부한 이미지(있으면 생성 대신 이 이미지를 발행에 사용). */
+export async function agentChat(
+  history: { role: 'user' | 'assistant'; content: string }[],
+  attachedImageUrl?: string,
+): Promise<AgentChatResult> {
   const userId = await requireUserId();
   const execute = buildExecute(userId);
-  const res = await runAgent({ userId, history, tools: TOOLS, execute, maxSteps: 8 });
+  const attached = (attachedImageUrl || '').trim();
+  const extraSystem = attached
+    ? `사용자가 이미지를 첨부했습니다(URL: ${attached}). 인스타 발행 등에는 generate_image 대신 이 첨부 이미지 URL 을 사용하세요. propose_publish 의 imageUrl 에 이 값을 넣으세요.`
+    : undefined;
+  const res = await runAgent({ userId, history, tools: TOOLS, execute, extraSystem, maxSteps: 8 });
   if (!res.ok) return { ok: false, reply: '', error: res.error };
 
   let draft: AgentDraft | undefined;
@@ -193,6 +201,11 @@ export async function agentChat(history: { role: 'user' | 'assistant'; content: 
     if (ev.tool === 'propose_publish' && ev.result?.ok) {
       proposal = ev.result.proposal;
     }
+  }
+  // 첨부 이미지가 있으면 초안/발행제안의 이미지를 첨부본으로 보강(누락 방지).
+  if (attached) {
+    draft = { ...(draft || {}), imageUrl: draft?.imageUrl || attached };
+    if (proposal && !proposal.imageUrl) proposal = { ...proposal, imageUrl: attached };
   }
   return { ok: true, reply: res.reply, draft, proposal };
 }
