@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import {
     Card, Stack, Group, Text, Badge, Button, TextInput, Paper, ThemeIcon, Box, Alert, Anchor, List,
 } from '@mantine/core';
-import { IconBrandInstagram, IconTrash, IconPlus, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
+import { IconBrandInstagram, IconTrash, IconPlus, IconInfoCircle, IconAlertCircle, IconBrandFacebook } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { connectAccountAction, deleteAccountAction } from '@/app/actions/accounts';
 
@@ -25,6 +25,16 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountI
     const [igUserId, setIgUserId] = useState('');
     const [err, setErr] = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
+
+    // OAuth 콜백 결과(?connected=N / ?error=...) 표시 후 URL 정리.
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search);
+        const connected = q.get('connected');
+        const error = q.get('error');
+        if (connected) notifications.show({ title: '연결 완료', message: `인스타 비즈니스 계정 ${connected}개가 연결되었습니다.`, color: 'teal' });
+        else if (error) notifications.show({ title: '연결 실패', message: error, color: 'red', autoClose: 8000 });
+        if (connected || error) window.history.replaceState({}, '', window.location.pathname);
+    }, []);
 
     const handleConnect = (e: React.FormEvent) => {
         e.preventDefault();
@@ -56,6 +66,22 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountI
 
     return (
         <Stack gap="lg">
+            {/* 간편 연결 — 페이스북 로그인(OAuth). 고객은 로그인만 하면 됨. */}
+            <Paper withBorder p="md" radius="md" bg="grape.0">
+                <Group justify="space-between" wrap="nowrap">
+                    <Group gap="sm" wrap="nowrap">
+                        <ThemeIcon variant="filled" color="blue" size={40} radius="md"><IconBrandFacebook size={22} /></ThemeIcon>
+                        <Box>
+                            <Text fw={700} size="sm">간편 연결 (추천)</Text>
+                            <Text size="xs" c="dimmed">페이스북으로 로그인하면 비즈니스 인스타가 자동 연결됩니다. (비즈니스 계정 + 페이지 연결 필요)</Text>
+                        </Box>
+                    </Group>
+                    <Button component="a" href="/api/connect/instagram" color="blue" leftSection={<IconBrandFacebook size={18} />}>
+                        페이스북으로 연결
+                    </Button>
+                </Group>
+            </Paper>
+
             {initialAccounts.length > 0 && (
                 <Stack gap="xs">
                     {initialAccounts.map((a) => (
