@@ -41,7 +41,7 @@ export interface AutomationTypeMeta {
 }
 
 // ── scheduled_publish config 형태 ─────────────────────────
-export type SourceKind = 'ai' | 'uploaded' | 'drive' | 'local';
+export type SourceKind = 'ai' | 'uploaded' | 'rss' | 'drive' | 'local';
 
 export interface PublishSourceConfig {
   kind: SourceKind;
@@ -54,6 +54,10 @@ export interface PublishSourceConfig {
   // uploaded
   items?: Array<{ imageUrl?: string; title?: string; body?: string; caption?: string }>;
   cursor?: number;
+  // rss
+  feedUrl?: string;
+  rewriteWithAI?: boolean;
+  lastSeenGuid?: string;
 }
 
 export interface ScheduledPublishConfig {

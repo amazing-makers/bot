@@ -2,7 +2,8 @@
 
 import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
-import { runAgent, generateBlogPost, generateImage, type AgentToolDef } from '@amakers/ai';
+import { runAgent, generateBlogPost, type AgentToolDef } from '@amakers/ai';
+import { generateImageHosted } from '@/lib/image-hosted';
 import { publishToChannels, type PublishToChannelsInput, type PublishResult } from './multi-publish';
 import { createAutomation, listAutomations } from './automations';
 
@@ -51,7 +52,9 @@ const TOOLS: AgentToolDef[] = [
       scheduleKind: 'interval(주기 반복) 또는 daily(매일 정시). 기본 interval',
       intervalMinutes: 'interval 일 때 주기(분). 예: 3시간=180',
       dailyTime: 'daily 일 때 KST 시각 "HH:MM". 예: 아침 9시="09:00"',
-      topic: 'AI가 생성할 글 주제(필수)',
+      sourceKind: 'ai(주제로 매번 생성) 또는 rss(피드 자동 전환). 기본 ai',
+      topic: 'ai 소스일 때 생성할 글 주제',
+      feedUrl: 'rss 소스일 때 RSS/Atom 피드 주소',
       tone: 'info|guide|review|friendly (선택)',
       length: 'short|medium|long (선택)',
       imagePrompt: '이미지 생성용 설명(선택, 없으면 topic 사용)',
@@ -89,7 +92,7 @@ function buildExecute(userId: string) {
         return r.ok ? { ok: true, title: r.title, markdown: r.markdown } : { ok: false, error: r.error };
       }
       case 'generate_image': {
-        const r = await generateImage(String(args?.prompt || ''), args?.ratio || 'square');
+        const r = await generateImageHosted(userId, String(args?.prompt || ''), args?.ratio || 'square');
         return r.ok ? { ok: true, url: r.url } : { ok: false, error: r.error };
       }
       case 'propose_publish': {
@@ -115,15 +118,19 @@ function buildExecute(userId: string) {
         return { ok: true, proposal };
       }
       case 'create_automation': {
+        const isRss = args?.sourceKind === 'rss' || (!!args?.feedUrl && !args?.topic);
+        const source = isRss
+          ? { kind: 'rss' as const, feedUrl: String(args?.feedUrl || ''), rewriteWithAI: true }
+          : {
+              kind: 'ai' as const,
+              topic: String(args?.topic || ''),
+              tone: args?.tone,
+              length: args?.length,
+              withImage: arr(args?.instaIds).length > 0,
+              imagePrompt: args?.imagePrompt ? String(args.imagePrompt) : undefined,
+            };
         const config = {
-          source: {
-            kind: 'ai' as const,
-            topic: String(args?.topic || ''),
-            tone: args?.tone,
-            length: args?.length,
-            withImage: arr(args?.instaIds).length > 0,
-            imagePrompt: args?.imagePrompt ? String(args.imagePrompt) : undefined,
-          },
+          source,
           channels: { instaIds: arr(args?.instaIds), blogIds: arr(args?.blogIds), tistoryIds: arr(args?.tistoryIds) },
         };
         const isDaily = args?.scheduleKind === 'daily' || (!!args?.dailyTime && !args?.intervalMinutes);
@@ -168,27 +175,45 @@ export interface AgentChatResult {
   error?: string;
 }
 
-/** 허브 AI 채팅 — 도구 사용 에이전트 한 번 실행. history 의 마지막이 새 사용자 메시지. */
-export async function agentChat(history: { role: 'user' | 'assistant'; content: string }[]): Promise<AgentChatResult> {
+/** 허브 AI 채팅 — 도구 사용 에이전트 한 번 실행. history 의 마지막이 새 사용자 메시지.
+ *  attachedImageUrl: 사용자가 첨부한 이미지(있으면 생성 대신 이 이미지를 발행에 사용). */
+export async function agentChat(
+  history: { role: 'user' | 'assistant'; content: string }[],
+  attachedImageUrl?: string,
+): Promise<AgentChatResult> {
   const userId = await requireUserId();
   const execute = buildExecute(userId);
-  const res = await runAgent({ userId, history, tools: TOOLS, execute, maxSteps: 8 });
+  const attached = (attachedImageUrl || '').trim();
+  const extraSystem = attached
+    ? `사용자가 이미지를 첨부했습니다(URL: ${attached}). 인스타 발행 등에는 generate_image 대신 이 첨부 이미지 URL 을 사용하세요. propose_publish 의 imageUrl 에 이 값을 넣으세요.`
+    : undefined;
+  const res = await runAgent({ userId, history, tools: TOOLS, execute, extraSystem, maxSteps: 8 });
   if (!res.ok) return { ok: false, reply: '', error: res.error };
 
   let draft: AgentDraft | undefined;
   let proposal: PublishToChannelsInput | undefined;
+  let reply = res.reply;
   for (const ev of res.events) {
     if (ev.tool === 'generate_post' && ev.result?.ok) {
       draft = { ...(draft || {}), title: ev.result.title, markdown: ev.result.markdown };
     }
-    if (ev.tool === 'generate_image' && ev.result?.ok) {
-      draft = { ...(draft || {}), imageUrl: ev.result.url };
+    if (ev.tool === 'generate_image') {
+      if (ev.result?.ok) draft = { ...(draft || {}), imageUrl: ev.result.url };
+      else if (ev.result?.error) reply = `${reply}\n\n🖼️ 이미지 오류: ${ev.result.error}`;
+    }
+    if (ev.tool === 'generate_post' && ev.result && !ev.result.ok && ev.result.error) {
+      reply = `${reply}\n\n📝 글 오류: ${ev.result.error}`;
     }
     if (ev.tool === 'propose_publish' && ev.result?.ok) {
       proposal = ev.result.proposal;
     }
   }
-  return { ok: true, reply: res.reply, draft, proposal };
+  // 첨부 이미지가 있으면 초안/발행제안의 이미지를 첨부본으로 보강(누락 방지).
+  if (attached) {
+    draft = { ...(draft || {}), imageUrl: draft?.imageUrl || attached };
+    if (proposal && !proposal.imageUrl) proposal = { ...proposal, imageUrl: attached };
+  }
+  return { ok: true, reply, draft, proposal };
 }
 
 /** 사용자가 화면에서 "발행" 확정 → 실제 다채널 발행. */

@@ -3,16 +3,24 @@
  * 엔진(run.ts)이 automation.type 으로 핸들러를 찾아 실행한다.
  */
 
-import { generateBlogPost, generateImage, deriveCaption } from '@amakers/ai';
+import { generateBlogPost, deriveCaption } from '@amakers/ai';
+import { prisma } from '@amakers/db';
+import { generateImageHosted } from '@/lib/image-hosted';
 import { publishForUser } from '@/lib/publish-core';
+import { fetchFeedItems } from './rss';
 import type { AutomationHandler, AutomationTypeMeta, RunResult, ScheduledPublishConfig } from './types';
 
-/** 콘텐츠 소스 → 이번 회차 발행할 1건을 만든다. 확장 지점(드라이브/로컬 등). */
+type ProduceResult =
+  | { ok: true; title: string; body: string; imageUrl?: string; caption?: string; configPatch?: any }
+  | { ok: false; skip?: boolean; error: string };
+
+/** 콘텐츠 소스 → 이번 회차 발행할 1건을 만든다. preview=true 면 부작용(소비/표시) 없이 조회만. */
 async function produceContent(
   userId: string,
   cfg: ScheduledPublishConfig,
   needImage: boolean,
-): Promise<{ ok: true; title: string; body: string; imageUrl?: string; caption?: string; configPatch?: any } | { ok: false; skip?: boolean; error: string }> {
+  preview = false,
+): Promise<ProduceResult> {
   const src = cfg.source || ({ kind: 'ai' } as any);
 
   if (src.kind === 'ai') {
@@ -21,11 +29,46 @@ async function produceContent(
     if (!post.ok) return { ok: false, error: post.error || 'AI 글 생성 실패' };
     let imageUrl: string | undefined;
     if (needImage || src.withImage) {
-      const img = await generateImage(src.imagePrompt?.trim() || src.topic, 'square');
+      const img = await generateImageHosted(userId, src.imagePrompt?.trim() || src.topic, 'square');
       if (img.ok) imageUrl = img.url;
       else if (needImage) return { ok: false, error: '이미지 생성 실패: ' + (img.error || '') };
     }
     return { ok: true, title: post.title || src.topic.slice(0, 60), body: post.markdown || '', imageUrl };
+  }
+
+  if (src.kind === 'rss') {
+    if (!src.feedUrl?.trim()) return { ok: false, error: 'RSS 주소(feedUrl)가 없습니다' };
+    let items;
+    try {
+      items = await fetchFeedItems(src.feedUrl.trim());
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'RSS 가져오기 실패' };
+    }
+    if (!items.length) return { ok: false, skip: true, error: '피드에 항목이 없습니다' };
+    const newest = items[0];
+    if (src.lastSeenGuid && newest.guid === src.lastSeenGuid) {
+      return { ok: false, skip: true, error: '새 항목이 없습니다' };
+    }
+    let title = newest.title || '새 소식';
+    let body = newest.summary || '';
+    if (src.rewriteWithAI) {
+      const post = await generateBlogPost(userId, {
+        topic: `다음 글감을 SNS 게시용으로 자연스럽고 매력적으로 한국어 재작성:\n제목: ${newest.title}\n내용: ${(newest.summary || '').slice(0, 800)}`,
+        length: 'short',
+      });
+      if (post.ok) {
+        title = post.title || title;
+        body = post.markdown || body;
+      }
+    }
+    if (newest.link) body = `${body}\n\n원문: ${newest.link}`;
+    let imageUrl: string | undefined;
+    if (needImage) {
+      const img = await generateImageHosted(userId, newest.title || title, 'square');
+      if (img.ok) imageUrl = img.url;
+      else return { ok: false, error: '이미지 생성 실패: ' + (img.error || '') };
+    }
+    return { ok: true, title, body, imageUrl, configPatch: { source: { ...src, lastSeenGuid: newest.guid } } };
   }
 
   if (src.kind === 'uploaded') {
@@ -43,7 +86,19 @@ async function produceContent(
     };
   }
 
-  // drive / local — 확장 지점(추후 연동). 지금은 건너뜀.
+  if (src.kind === 'local') {
+    // 데스크톱 에이전트가 올린 드롭 큐에서 가장 오래된 PENDING 1건 소비.
+    const drop = await prisma.agentDropItem.findFirst({
+      where: { userId, status: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!drop) return { ok: false, skip: true, error: '데스크톱에서 올라온 대기 항목이 없습니다' };
+    if (!preview) await prisma.agentDropItem.update({ where: { id: drop.id }, data: { status: 'USED', usedAt: new Date() } });
+    const cap = (drop.caption || '').trim();
+    return { ok: true, title: cap || drop.source || '새 사진', body: cap, imageUrl: drop.imageUrl, caption: cap || undefined };
+  }
+
+  // drive — 확장 지점(추후 연동). 지금은 건너뜀.
   return { ok: false, skip: true, error: `'${src.kind}' 소스는 곧 지원됩니다(연동 준비중)` };
 }
 
@@ -92,11 +147,29 @@ export const HANDLERS: Record<string, AutomationHandler> = {
   scheduled_publish: scheduledPublish,
 };
 
+export interface PreviewResult {
+  ok: boolean;
+  title?: string;
+  body?: string;
+  imageUrl?: string;
+  note?: string;
+}
+
+/** 발행 없이 "이번 회차에 무엇을 올릴지" 미리 만들어 본다(부작용 없음). */
+export async function previewContent(userId: string, cfg: ScheduledPublishConfig): Promise<PreviewResult> {
+  const ch = cfg.channels || {};
+  const needImage = (ch.instaIds?.length || 0) > 0;
+  const r = await produceContent(userId, cfg, needImage, true);
+  if (!r.ok) return { ok: false, note: r.error };
+  const caption = r.caption || deriveCaption(r.title, r.body);
+  return { ok: true, title: r.title, body: r.body, imageUrl: r.imageUrl, note: caption !== r.body ? `인스타 캡션: ${caption.slice(0, 120)}` : undefined };
+}
+
 /** UI/AI 가 만들 수 있는 자동화 타입 목록. */
 export const AUTOMATION_TYPES: AutomationTypeMeta[] = [
   {
     type: 'scheduled_publish',
     label: '예약 자동 발행',
-    description: '정해진 주기마다 소스(AI 생성/업로드 등)로 글·이미지를 만들어 선택한 채널에 자동 발행',
+    description: '정해진 주기/시각마다 소스(AI 생성·업로드 항목·RSS 피드)로 글·이미지를 만들어 선택 채널에 자동 발행',
   },
 ];

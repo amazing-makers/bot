@@ -23,6 +23,7 @@ export { validateApiKey, type ValidateResult } from './validate';
 // AI 생성 (전 봇/허브 공용)
 export { generateBlogPost, type WriterInput, type WriterResult, type BlogTone, type BlogLength } from './writer';
 export { generateImage, buildPollinationsUrl, IMAGE_RATIOS, type ImageRatio, type GenerateImageResult } from './image';
+export { generateImageHosted, type HostedImageResult } from './image-hosted';
 export { stripMarkdown, deriveCaption } from './caption';
 
 // 도구 사용(tool-use) 에이전트 — 허브 AI 채팅

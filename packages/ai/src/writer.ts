@@ -3,7 +3,11 @@
  * 전 봇/허브 공용. 무료 키: Gemini/Groq.
  */
 
-import { resolveAiKey } from './api-keys';
+import { resolveAllAiKeys } from './api-keys';
+
+function isQuota(e: any): boolean {
+  return /\b429\b|quota|exceeded|rate.?limit|RESOURCE_EXHAUSTED/i.test(String(e?.message || e || ''));
+}
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -82,22 +86,35 @@ function splitTitle(markdown: string): { title: string; body: string } {
   return { title: '', body: text };
 }
 
-/** 사용자 BYOK 키로 블로그 글 생성. 키 없으면 안내. */
+/** 사용자 BYOK 키로 블로그 글 생성. 429(한도) 시 다음 provider 로 폴백. */
 export async function generateBlogPost(userId: string, input: WriterInput): Promise<WriterResult> {
   if (!input.topic?.trim()) return { ok: false, error: '주제를 입력하세요' };
-  const resolved = await resolveAiKey(userId);
-  if (!resolved) return { ok: false, error: 'AI 키가 없습니다 — 설정에서 무료 Gemini/Groq 키를 등록하세요' };
+  const keys = await resolveAllAiKeys(userId);
+  if (keys.length === 0) return { ok: false, error: 'AI 키가 없습니다 — 설정에서 무료 Gemini/Groq 키를 등록하세요' };
   const prompt = buildPrompt(input);
   const maxTokens = LENGTH_TOKENS[input.length ?? 'medium'];
-  try {
-    const raw = resolved.provider === 'gemini'
-      ? await geminiGenerate(resolved.key, prompt, maxTokens)
-      : await groqGenerate(resolved.key, prompt, maxTokens);
-    if (!raw) return { ok: false, error: '생성 결과가 비어있습니다 — 다시 시도하세요' };
-    const { title, body } = splitTitle(raw);
-    return { ok: true, title: title || input.topic.slice(0, 80), markdown: body, provider: resolved.provider };
-  } catch (e: any) {
-    if (e?.name === 'TimeoutError') return { ok: false, error: '생성 시간이 초과됐습니다 — 길이를 줄이거나 다시 시도하세요' };
-    return { ok: false, error: e?.message || 'AI 생성 오류' };
+
+  let lastErr: any;
+  for (let i = 0; i < keys.length; i++) {
+    const { provider, key } = keys[i];
+    try {
+      const raw = provider === 'gemini'
+        ? await geminiGenerate(key, prompt, maxTokens)
+        : await groqGenerate(key, prompt, maxTokens);
+      if (!raw) { lastErr = new Error('생성 결과가 비어있습니다'); continue; }
+      const { title, body } = splitTitle(raw);
+      return { ok: true, title: title || input.topic.slice(0, 80), markdown: body, provider };
+    } catch (e: any) {
+      lastErr = e;
+      if (e?.name === 'TimeoutError') return { ok: false, error: '생성 시간이 초과됐습니다 — 길이를 줄이거나 다시 시도하세요' };
+      if (isQuota(e) && i < keys.length - 1) continue; // 다음 provider 로 폴백
+      if (!isQuota(e)) return { ok: false, error: e?.message || 'AI 생성 오류' };
+    }
   }
+  return {
+    ok: false,
+    error: isQuota(lastErr)
+      ? 'AI 무료 사용량이 초과됐어요 — 1~2분 후 다시 시도하거나 설정에서 Groq 키도 등록하세요.'
+      : (lastErr?.message || 'AI 생성 오류'),
+  };
 }

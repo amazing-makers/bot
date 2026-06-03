@@ -1,0 +1,6 @@
+{
+  "hubUrl": "https://app.amakers.co.kr",
+  "token": "dsk_여기에_허브_자동화_페이지의_데스크톱_토큰을_붙여넣기",
+  "folder": "C:\\Users\\내이름\\Pictures\\업로드폴더",
+  "intervalSeconds": 5
+}
