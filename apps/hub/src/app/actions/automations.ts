@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
 import { runAutomationById, computeNext } from '@/lib/automation/run';
-import { AUTOMATION_TYPES } from '@/lib/automation/handlers';
+import { AUTOMATION_TYPES, previewContent, type PreviewResult } from '@/lib/automation/handlers';
 import type { ScheduledPublishConfig } from '@/lib/automation/types';
 
 async function requireUserId(): Promise<string> {
@@ -269,4 +269,12 @@ export async function runAutomationNow(id: string): Promise<{ ok: boolean; statu
   const r = await runAutomationById(id, userId);
   revalidatePath('/automations');
   return { ok: r.status !== 'FAILED', status: r.status, note: r.summary, error: r.error };
+}
+
+/** 발행 없이 미리보기(드라이런). 무엇을 올릴지 확인용. */
+export async function previewAutomation(id: string): Promise<PreviewResult> {
+  const userId = await requireUserId();
+  const row = await prisma.automation.findFirst({ where: { id, userId }, select: { config: true } });
+  if (!row) return { ok: false, note: '자동화를 찾을 수 없습니다' };
+  return previewContent(userId, row.config as any);
 }

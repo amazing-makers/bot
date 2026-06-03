@@ -7,12 +7,12 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
-  IconPlus, IconPlayerPlay, IconTrash, IconPlayerPause, IconBolt, IconClock, IconAlertCircle, IconHistory, IconPhoto, IconPencil,
+  IconPlus, IconPlayerPlay, IconTrash, IconPlayerPause, IconBolt, IconClock, IconAlertCircle, IconHistory, IconPhoto, IconPencil, IconEye,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { ImageUpload } from '@/components/ImageUpload';
 import {
-  createAutomation, updateAutomation, setAutomationPaused, deleteAutomation, runAutomationNow, getAutomationRuns,
+  createAutomation, updateAutomation, setAutomationPaused, deleteAutomation, runAutomationNow, getAutomationRuns, previewAutomation,
   type AutomationListItem, type AutomationRunItem,
 } from '@/app/actions/automations';
 
@@ -82,6 +82,11 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
   const [histOpen, histCtl] = useDisclosure(false);
   const [histTitle, setHistTitle] = useState('');
   const [histRuns, setHistRuns] = useState<AutomationRunItem[] | null>(null);
+
+  // ── 미리보기 모달 ──
+  const [prevOpen, prevCtl] = useDisclosure(false);
+  const [prevTitle, setPrevTitle] = useState('');
+  const [prevData, setPrevData] = useState<any | null>(null);
 
   const hasAnyAccount = accounts.instagram.length + accounts.blog.length + accounts.tistory.length > 0;
 
@@ -201,6 +206,13 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
     setHistRuns(null);
     histCtl.open();
     getAutomationRuns(it.id).then(setHistRuns).catch(() => setHistRuns([]));
+  }
+
+  function openPreview(it: AutomationListItem) {
+    setPrevTitle(it.name);
+    setPrevData(null);
+    prevCtl.open();
+    previewAutomation(it.id).then(setPrevData).catch(() => setPrevData({ ok: false, note: '미리보기 실패' }));
   }
 
   return (
@@ -364,6 +376,7 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                 {it.lastError && <Text size="xs" c="red" mt={4} lineClamp={2}>오류: {it.lastError}</Text>}
               </Box>
               <Group gap={6} wrap="nowrap">
+                <ActionIcon variant="light" color="teal" onClick={() => openPreview(it)} title="미리보기(발행 안 함)"><IconEye size={16} /></ActionIcon>
                 <ActionIcon variant="light" color="blue" onClick={() => startEdit(it)} title="수정"><IconPencil size={16} /></ActionIcon>
                 <ActionIcon variant="light" color="grape" onClick={() => openHistory(it)} title="실행 이력"><IconHistory size={16} /></ActionIcon>
                 <ActionIcon variant="light" color="blue" onClick={() => runNow(it)} loading={pending} title="지금 실행"><IconPlayerPlay size={16} /></ActionIcon>
@@ -374,6 +387,22 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
           </Paper>
         ))
       )}
+
+      <Modal opened={prevOpen} onClose={prevCtl.close} title={`미리보기 — ${prevTitle}`} size="md">
+        {prevData === null ? (
+          <Group justify="center" py="lg"><Loader size="sm" /><Text size="sm" c="dimmed">생성 중…</Text></Group>
+        ) : !prevData.ok ? (
+          <Alert color="yellow" variant="light" icon={<IconAlertCircle size={18} />}>{prevData.note || '미리볼 내용이 없습니다'}</Alert>
+        ) : (
+          <Stack gap="sm">
+            <Text size="xs" c="dimmed">다음 실행 시 이렇게 발행됩니다(실제 발행 아님):</Text>
+            {prevData.imageUrl && <Image src={prevData.imageUrl} radius="sm" h={200} fit="cover" alt="미리보기" />}
+            {prevData.title && <Text fw={600}>{prevData.title}</Text>}
+            {prevData.body && <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }} lineClamp={10}>{prevData.body}</Text>}
+            {prevData.note && <Text size="xs" c="dimmed">{prevData.note}</Text>}
+          </Stack>
+        )}
+      </Modal>
 
       <Modal opened={histOpen} onClose={histCtl.close} title={`실행 이력 — ${histTitle}`} size="md">
         {histRuns === null ? (

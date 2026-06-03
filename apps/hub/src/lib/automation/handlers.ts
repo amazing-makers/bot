@@ -9,12 +9,17 @@ import { publishForUser } from '@/lib/publish-core';
 import { fetchFeedItems } from './rss';
 import type { AutomationHandler, AutomationTypeMeta, RunResult, ScheduledPublishConfig } from './types';
 
-/** 콘텐츠 소스 → 이번 회차 발행할 1건을 만든다. 확장 지점(드라이브/로컬 등). */
+type ProduceResult =
+  | { ok: true; title: string; body: string; imageUrl?: string; caption?: string; configPatch?: any }
+  | { ok: false; skip?: boolean; error: string };
+
+/** 콘텐츠 소스 → 이번 회차 발행할 1건을 만든다. preview=true 면 부작용(소비/표시) 없이 조회만. */
 async function produceContent(
   userId: string,
   cfg: ScheduledPublishConfig,
   needImage: boolean,
-): Promise<{ ok: true; title: string; body: string; imageUrl?: string; caption?: string; configPatch?: any } | { ok: false; skip?: boolean; error: string }> {
+  preview = false,
+): Promise<ProduceResult> {
   const src = cfg.source || ({ kind: 'ai' } as any);
 
   if (src.kind === 'ai') {
@@ -87,7 +92,7 @@ async function produceContent(
       orderBy: { createdAt: 'asc' },
     });
     if (!drop) return { ok: false, skip: true, error: '데스크톱에서 올라온 대기 항목이 없습니다' };
-    await prisma.agentDropItem.update({ where: { id: drop.id }, data: { status: 'USED', usedAt: new Date() } });
+    if (!preview) await prisma.agentDropItem.update({ where: { id: drop.id }, data: { status: 'USED', usedAt: new Date() } });
     const cap = (drop.caption || '').trim();
     return { ok: true, title: cap || drop.source || '새 사진', body: cap, imageUrl: drop.imageUrl, caption: cap || undefined };
   }
@@ -140,6 +145,24 @@ const scheduledPublish: AutomationHandler = async ({ userId, automation }): Prom
 export const HANDLERS: Record<string, AutomationHandler> = {
   scheduled_publish: scheduledPublish,
 };
+
+export interface PreviewResult {
+  ok: boolean;
+  title?: string;
+  body?: string;
+  imageUrl?: string;
+  note?: string;
+}
+
+/** 발행 없이 "이번 회차에 무엇을 올릴지" 미리 만들어 본다(부작용 없음). */
+export async function previewContent(userId: string, cfg: ScheduledPublishConfig): Promise<PreviewResult> {
+  const ch = cfg.channels || {};
+  const needImage = (ch.instaIds?.length || 0) > 0;
+  const r = await produceContent(userId, cfg, needImage, true);
+  if (!r.ok) return { ok: false, note: r.error };
+  const caption = r.caption || deriveCaption(r.title, r.body);
+  return { ok: true, title: r.title, body: r.body, imageUrl: r.imageUrl, note: caption !== r.body ? `인스타 캡션: ${caption.slice(0, 120)}` : undefined };
+}
 
 /** UI/AI 가 만들 수 있는 자동화 타입 목록. */
 export const AUTOMATION_TYPES: AutomationTypeMeta[] = [
