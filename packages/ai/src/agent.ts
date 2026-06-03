@@ -10,8 +10,13 @@
  *   res.events // [{ tool, args, result }] — UI가 초안/발행제안 추출에 사용
  */
 
-import { resolveAiKey } from './api-keys';
+import { resolveAllAiKeys } from './api-keys';
 import { chatComplete, type ChatMessage } from './llm';
+
+function isQuotaError(e: any): boolean {
+  const m = String(e?.message || e || '');
+  return /\b429\b|quota|exceeded|rate.?limit|RESOURCE_EXHAUSTED/i.test(m);
+}
 
 export interface AgentToolDef {
   name: string;
@@ -94,34 +99,49 @@ function parseJsonObject(text: string): any | null {
   return null;
 }
 
+/** 한도(429) 시 다음 provider 로 폴백하며 LLM 호출. */
+async function completeWithFallback(
+  keys: Array<{ provider: any; key: string }>,
+  startIdx: { i: number },
+  args: { system: string; messages: ChatMessage[] },
+): Promise<string> {
+  let lastErr: any;
+  for (let j = startIdx.i; j < keys.length; j++) {
+    try {
+      const text = await chatComplete({ provider: keys[j].provider, key: keys[j].key, system: args.system, messages: args.messages, maxTokens: 1200, temperature: 0.4 });
+      startIdx.i = j; // 이후 단계도 이 provider 우선
+      return text;
+    } catch (e) {
+      lastErr = e;
+      if (isQuotaError(e) && j < keys.length - 1) continue; // 다음 provider 로
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
 /** BYOK 키로 도구 사용 에이전트를 실행한다. */
 export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
-  const resolved = await resolveAiKey(opts.userId);
-  if (!resolved) {
+  const keys = await resolveAllAiKeys(opts.userId);
+  if (keys.length === 0) {
     return { ok: false, reply: '', events: [], error: 'AI 키가 없습니다 — 설정(키)에서 무료 Gemini/Groq 키를 먼저 등록하세요.' };
   }
   const system = buildSystem(opts.tools, opts.extraSystem);
   const messages: ChatMessage[] = [...opts.history];
   const events: AgentEvent[] = [];
   const maxSteps = opts.maxSteps ?? 6;
+  const keyIdx = { i: 0 };
 
   try {
     for (let step = 0; step < maxSteps; step++) {
-      const text = await chatComplete({
-        provider: resolved.provider,
-        key: resolved.key,
-        system,
-        messages,
-        maxTokens: 1200,
-        temperature: 0.4,
-      });
+      const text = await completeWithFallback(keys, keyIdx, { system, messages });
       const obj = parseJsonObject(text);
       if (!obj) {
         // JSON 아니면 그대로 사용자 답변으로 간주
-        return { ok: true, reply: text || '죄송해요, 한 번만 더 말씀해 주세요.', events, provider: resolved.provider };
+        return { ok: true, reply: text || '죄송해요, 한 번만 더 말씀해 주세요.', events, provider: keys[keyIdx.i].provider };
       }
       if (typeof obj.final === 'string') {
-        return { ok: true, reply: obj.final, events, provider: resolved.provider };
+        return { ok: true, reply: obj.final, events, provider: keys[keyIdx.i].provider };
       }
       if (typeof obj.action === 'string') {
         let result: any;
@@ -136,11 +156,20 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         continue;
       }
       // 알 수 없는 형태 → 텍스트를 답변으로
-      return { ok: true, reply: text, events, provider: resolved.provider };
+      return { ok: true, reply: text, events, provider: keys[keyIdx.i].provider };
     }
-    return { ok: true, reply: '작업이 길어졌어요. 요청을 조금 더 작게 나눠 말씀해 주세요.', events, provider: resolved.provider };
+    return { ok: true, reply: '작업이 길어졌어요. 요청을 조금 더 작게 나눠 말씀해 주세요.', events, provider: keys[keyIdx.i].provider };
   } catch (e: any) {
     if (e?.name === 'TimeoutError') return { ok: false, reply: '', events, error: 'AI 응답 시간이 초과됐어요. 다시 시도해 주세요.' };
+    if (isQuotaError(e)) {
+      const hasGroq = keys.some((k) => k.provider === 'groq');
+      return {
+        ok: false, reply: '', events,
+        error: hasGroq
+          ? 'AI 키 무료 사용량이 모두 초과됐어요. 1~2분 후 다시 시도해 주세요(무료 한도는 분/일 단위로 회복됩니다).'
+          : 'Gemini 무료 사용량이 초과됐어요. 1~2분 뒤 다시 시도하거나, 설정(키)에서 Groq 키도 등록하면 한도 초과 시 자동 전환됩니다.',
+      };
+    }
     return { ok: false, reply: '', events, error: e?.message || 'AI 오류' };
   }
 }

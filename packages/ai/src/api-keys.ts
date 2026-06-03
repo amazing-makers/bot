@@ -86,6 +86,16 @@ export async function resolveAiKey(userId: string): Promise<{ provider: AiProvid
   return null;
 }
 
+/** 등록된 모든 provider 의 키(gemini, groq 순). 429/한도 초과 시 다음 provider 로 폴백하는 데 사용. */
+export async function resolveAllAiKeys(userId: string): Promise<Array<{ provider: AiProvider; key: string }>> {
+  const out: Array<{ provider: AiProvider; key: string }> = [];
+  for (const p of AI_PROVIDERS) {
+    const key = await getUserApiKey(userId, p);
+    if (key) out.push({ provider: p, key });
+  }
+  return out;
+}
+
 /** 사용자가 AI 키를 하나라도 등록했는지 (허브 상태 칩·온보딩용). */
 export async function hasAnyApiKey(userId: string): Promise<boolean> {
   const n = await prisma.userApiKey.count({ where: { userId } });
