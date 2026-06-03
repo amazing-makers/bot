@@ -13,6 +13,7 @@ import {
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { BOT_TOOLS } from '@amakers/types';
+import { ImageUpload } from '@/components/ImageUpload';
 import { generateBlogPostAction, generateImageAction } from '@/app/actions/ai-actions';
 import { publishToChannels } from '@/app/actions/multi-publish';
 
@@ -239,7 +240,8 @@ export function MultiComposeForm({
             </Stack>
           </Paper>
 
-          <TextInput label="대표 이미지 URL (인스타는 필수)" placeholder="AI 생성하거나 공개 URL 직접 입력" value={imageUrl} onChange={(e) => setImageUrl(e.currentTarget.value)} />
+          <TextInput label="대표 이미지 URL (인스타는 필수)" placeholder="업로드·AI 생성하거나 공개 URL 직접 입력" value={imageUrl} onChange={(e) => setImageUrl(e.currentTarget.value)} />
+          <ImageUpload label="내 PC에서 이미지 업로드" multiple={false} onUploaded={(url) => { setImageUrl(url); notifications.show({ message: '대표 이미지로 설정됨', color: 'teal' }); }} />
 
           <Textarea
             ref={bodyRef}

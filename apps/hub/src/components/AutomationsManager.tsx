@@ -10,6 +10,7 @@ import {
   IconPlus, IconPlayerPlay, IconTrash, IconPlayerPause, IconBolt, IconClock, IconAlertCircle, IconHistory, IconPhoto,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import { ImageUpload } from '@/components/ImageUpload';
 import {
   createAutomation, setAutomationPaused, deleteAutomation, runAutomationNow, getAutomationRuns,
   type AutomationListItem, type AutomationRunItem,
@@ -244,6 +245,8 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
               <Paper withBorder radius="sm" p="sm" bg="var(--mantine-color-gray-0)">
                 <Text size="xs" c="dimmed" mb="xs">발행할 항목을 순서대로 추가하세요. 매 회차 위에서부터 하나씩 사용합니다.</Text>
                 <Stack gap={6}>
+                  <ImageUpload label="내 PC에서 이미지 업로드" onUploaded={(url, name) => setUploads((arr) => [...arr, { imageUrl: url, caption: name.replace(/\.[^.]+$/, ''), title: name.replace(/\.[^.]+$/, ''), body: '' }])} />
+                  <Divider my={4} label="또는 이미지 URL 붙여넣기" labelPosition="center" />
                   <Textarea size="xs" label="이미지 URL 여러 개 (줄바꿈으로 한 번에)" placeholder={'https://...\nhttps://...'} autosize minRows={2} value={bulkUrls} onChange={(e) => setBulkUrls(e.currentTarget.value)} />
                   <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addBulk}>URL 일괄 추가</Button>
                   <Divider my={4} label="또는 1개씩 상세 입력" labelPosition="center" />
