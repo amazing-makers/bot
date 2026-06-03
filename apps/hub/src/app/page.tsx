@@ -8,6 +8,8 @@ import { prisma } from '@amakers/db';
 import { ToolGrid } from '@/components/ToolGrid';
 import { SignOutButton } from '@/components/SignOutButton';
 import { AgentChat } from '@/components/AgentChat';
+import { HubTabs } from '@/components/HubTabs';
+import { Paper } from '@mantine/core';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,54 +66,55 @@ export default async function HubDashboard() {
         </Alert>
       )}
 
-      {/* AI 비서 채팅 — 첫 화면 핵심 */}
-      <AgentChat hasKey={hasKey} />
-
-      {/* 1작성 → 다채널 CTA */}
-      <a href="/compose" style={{ textDecoration: 'none', display: 'block', marginBottom: 'var(--mantine-spacing-lg)' }}>
-        <Group
-          justify="space-between"
-          wrap="nowrap"
-          p="md"
-          style={{
-            borderRadius: 12,
-            cursor: 'pointer',
-            background: 'linear-gradient(90deg, var(--mantine-color-blue-6), var(--mantine-color-grape-6))',
-          }}
-        >
-          <Group gap="sm" wrap="nowrap">
-            <ThemeIcon size={40} radius="md" variant="white" color="blue"><IconSend size={22} /></ThemeIcon>
-            <div>
-              <Text fw={700} c="white">✍️ 한 번 작성 → 인스타·블로그·티스토리 동시 발행</Text>
-              <Text size="sm" c="white" opacity={0.9}>제목·본문·이미지를 한 번만 쓰면 선택한 모든 채널에 자동 적응되어 게시됩니다.</Text>
-            </div>
-          </Group>
-          <IconArrowRight size={22} color="white" />
-        </Group>
-      </a>
-
-      <Group mb="lg" gap="sm">
-        <Button component="a" href="/automations" variant="light" color="grape" leftSection={<IconBolt size={16} />}>
-          반복 자동화 — "3시간마다 자동 발행" 같은 작업 설정
-        </Button>
-      </Group>
-
-      {!hasKey && (
-        <Group mb="lg">
-          <Button
-            component="a"
-            href="/keys"
-            variant="light"
-            rightSection={<IconArrowRight size={16} />}
-          >
-            AI 키 연결하기 (무료) — 한 번 등록하면 모든 도구에서 AI 사용
-          </Button>
-        </Group>
-      )}
-
-      <Divider mb="lg" label="자동화 도구" labelPosition="left" />
-
-      <ToolGrid />
+      <HubTabs
+        agent={
+          <Stack>
+            <AgentChat hasKey={hasKey} />
+            {!hasKey && (
+              <Button component="a" href="/keys" variant="light" rightSection={<IconArrowRight size={16} />}>
+                AI 키 연결하기 (무료) — 한 번 등록하면 모든 도구에서 AI 사용
+              </Button>
+            )}
+          </Stack>
+        }
+        tools={
+          <Stack>
+            <a href="/compose" style={{ textDecoration: 'none', display: 'block' }}>
+              <Group
+                justify="space-between" wrap="nowrap" p="md"
+                style={{ borderRadius: 12, cursor: 'pointer', background: 'linear-gradient(90deg, var(--mantine-color-blue-6), var(--mantine-color-grape-6))' }}
+              >
+                <Group gap="sm" wrap="nowrap">
+                  <ThemeIcon size={40} radius="md" variant="white" color="blue"><IconSend size={22} /></ThemeIcon>
+                  <div>
+                    <Text fw={700} c="white">✍️ 한 번 작성 → 인스타·블로그·티스토리 동시 발행</Text>
+                    <Text size="sm" c="white" opacity={0.9}>제목·본문·이미지를 한 번만 쓰면 선택한 모든 채널에 자동 적응되어 게시됩니다.</Text>
+                  </div>
+                </Group>
+                <IconArrowRight size={22} color="white" />
+              </Group>
+            </a>
+            <Divider label="봇 / 앱" labelPosition="left" />
+            <ToolGrid />
+          </Stack>
+        }
+        automations={
+          <Stack>
+            <Paper withBorder radius="md" p="lg">
+              <Group justify="space-between" wrap="nowrap">
+                <Group gap="sm">
+                  <ThemeIcon variant="light" color="grape" size={44} radius="md"><IconBolt size={24} /></ThemeIcon>
+                  <div>
+                    <Text fw={700}>반복 자동화</Text>
+                    <Text size="sm" c="dimmed">"3시간마다 자동 발행", "매일 아침 9시 RSS 전환", 로컬 폴더 자동 업로드 등</Text>
+                  </div>
+                </Group>
+                <Button component="a" href="/automations" rightSection={<IconArrowRight size={16} />}>관리하기</Button>
+              </Group>
+            </Paper>
+          </Stack>
+        }
+      />
     </Container>
   );
 }

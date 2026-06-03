@@ -148,7 +148,7 @@ export function AgentChat({ hasKey }: { hasKey: boolean }) {
                 <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-gray-0)">
                   <Group gap={6} mb={6}><IconPhoto size={15} /><Text size="xs" fw={700} c="dimmed">생성된 초안</Text></Group>
                   {draft.imageUrl && (
-                    <Image src={draft.imageUrl} radius="sm" h={150} fit="cover" mb="xs" alt="생성 이미지" />
+                    <Image src={draft.imageUrl} radius="sm" mah={320} w="auto" fit="contain" mb="xs" alt="생성 이미지" />
                   )}
                   {draft.title && <Text fw={600} size="sm">{draft.title}</Text>}
                   {draft.markdown && (
