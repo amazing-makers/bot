@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import {
-  Container, Group, Title, Text, Badge, Button, Stack, ThemeIcon, Divider,
+  Container, Group, Title, Text, Badge, Button, Stack, ThemeIcon, Divider, Alert,
 } from '@mantine/core';
-import { IconBolt, IconKey, IconArrowRight, IconSend } from '@tabler/icons-react';
+import { IconBolt, IconKey, IconArrowRight, IconSend, IconAlertTriangle } from '@tabler/icons-react';
 import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
 import { ToolGrid } from '@/components/ToolGrid';
@@ -16,7 +16,10 @@ export default async function HubDashboard() {
   if (!session?.user) redirect('/login');
 
   const userId = (session.user as any).id as string;
-  const keyCount = await prisma.userApiKey.count({ where: { userId } });
+  const [keyCount, failedAutomations] = await Promise.all([
+    prisma.userApiKey.count({ where: { userId } }),
+    prisma.automation.count({ where: { userId, status: 'ACTIVE', lastStatus: 'FAILED' } }),
+  ]);
   const hasKey = keyCount > 0;
   const displayName = session.user.name || session.user.email || '사용자';
 
@@ -51,6 +54,15 @@ export default async function HubDashboard() {
         <Title order={2}>안녕하세요, {displayName}님 👋</Title>
         <Text c="dimmed">말로 시키면 AI 비서가 알아서 해드려요. 또는 아래 도구를 직접 선택하세요. 모든 도구는 기본 무료이며, AI는 내 API 키로 동작합니다.</Text>
       </Stack>
+
+      {failedAutomations > 0 && (
+        <Alert color="red" variant="light" mb="lg" icon={<IconAlertTriangle size={18} />}>
+          <Group justify="space-between" wrap="nowrap">
+            <Text size="sm">자동화 {failedAutomations}개에서 최근 실행이 실패했어요. 설정·계정 연결을 확인해 주세요.</Text>
+            <Button component="a" href="/automations" size="xs" color="red" variant="white">확인하기</Button>
+          </Group>
+        </Alert>
+      )}
 
       {/* AI 비서 채팅 — 첫 화면 핵심 */}
       <AgentChat hasKey={hasKey} />

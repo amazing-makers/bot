@@ -51,7 +51,9 @@ const TOOLS: AgentToolDef[] = [
       scheduleKind: 'interval(주기 반복) 또는 daily(매일 정시). 기본 interval',
       intervalMinutes: 'interval 일 때 주기(분). 예: 3시간=180',
       dailyTime: 'daily 일 때 KST 시각 "HH:MM". 예: 아침 9시="09:00"',
-      topic: 'AI가 생성할 글 주제(필수)',
+      sourceKind: 'ai(주제로 매번 생성) 또는 rss(피드 자동 전환). 기본 ai',
+      topic: 'ai 소스일 때 생성할 글 주제',
+      feedUrl: 'rss 소스일 때 RSS/Atom 피드 주소',
       tone: 'info|guide|review|friendly (선택)',
       length: 'short|medium|long (선택)',
       imagePrompt: '이미지 생성용 설명(선택, 없으면 topic 사용)',
@@ -115,15 +117,19 @@ function buildExecute(userId: string) {
         return { ok: true, proposal };
       }
       case 'create_automation': {
+        const isRss = args?.sourceKind === 'rss' || (!!args?.feedUrl && !args?.topic);
+        const source = isRss
+          ? { kind: 'rss' as const, feedUrl: String(args?.feedUrl || ''), rewriteWithAI: true }
+          : {
+              kind: 'ai' as const,
+              topic: String(args?.topic || ''),
+              tone: args?.tone,
+              length: args?.length,
+              withImage: arr(args?.instaIds).length > 0,
+              imagePrompt: args?.imagePrompt ? String(args.imagePrompt) : undefined,
+            };
         const config = {
-          source: {
-            kind: 'ai' as const,
-            topic: String(args?.topic || ''),
-            tone: args?.tone,
-            length: args?.length,
-            withImage: arr(args?.instaIds).length > 0,
-            imagePrompt: args?.imagePrompt ? String(args.imagePrompt) : undefined,
-          },
+          source,
           channels: { instaIds: arr(args?.instaIds), blogIds: arr(args?.blogIds), tistoryIds: arr(args?.tistoryIds) },
         };
         const isDaily = args?.scheduleKind === 'daily' || (!!args?.dailyTime && !args?.intervalMinutes);

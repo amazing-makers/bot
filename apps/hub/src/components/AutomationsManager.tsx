@@ -60,13 +60,16 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
   const [scheduleKind, setScheduleKind] = useState<'interval' | 'daily'>('interval');
   const [interval, setInterval] = useState<number>(180);
   const [dailyTime, setDailyTime] = useState('09:00');
-  const [sourceKind, setSourceKind] = useState<'ai' | 'uploaded'>('ai');
+  const [sourceKind, setSourceKind] = useState<'ai' | 'uploaded' | 'rss'>('ai');
   const [topic, setTopic] = useState('');
   const [tone, setTone] = useState<string>('info');
   const [length, setLength] = useState<string>('medium');
   const [imagePrompt, setImagePrompt] = useState('');
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [u, setU] = useState<UploadItem>({ imageUrl: '', caption: '', title: '', body: '' });
+  const [bulkUrls, setBulkUrls] = useState('');
+  const [feedUrl, setFeedUrl] = useState('');
+  const [rewriteWithAI, setRewriteWithAI] = useState(true);
   const [insta, setInsta] = useState<string[]>([]);
   const [blog, setBlog] = useState<string[]>([]);
   const [tistory, setTistory] = useState<string[]>([]);
@@ -91,18 +94,29 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
     setU({ imageUrl: '', caption: '', title: '', body: '' });
   }
 
+  function addBulk() {
+    const urls = bulkUrls.split(/[\n,]/).map((s) => s.trim()).filter((s) => /^https?:\/\//.test(s));
+    if (urls.length === 0) return notifications.show({ message: '이미지 URL을 줄바꿈으로 입력하세요', color: 'red' });
+    setUploads((arr) => [...arr, ...urls.map((imageUrl) => ({ imageUrl, caption: '', title: '', body: '' }))]);
+    setBulkUrls('');
+    notifications.show({ message: `${urls.length}개 항목 추가됨`, color: 'teal' });
+  }
+
   async function submit() {
     if (!name.trim()) return notifications.show({ message: '이름을 입력하세요', color: 'red' });
     if (insta.length + blog.length + tistory.length === 0) return notifications.show({ message: '채널을 1개 이상 선택하세요', color: 'red' });
     if (sourceKind === 'ai' && !topic.trim()) return notifications.show({ message: 'AI가 쓸 주제를 입력하세요', color: 'red' });
     if (sourceKind === 'uploaded' && uploads.length === 0) return notifications.show({ message: '업로드 항목을 1개 이상 추가하세요', color: 'red' });
+    if (sourceKind === 'rss' && !feedUrl.trim()) return notifications.show({ message: 'RSS 피드 주소를 입력하세요', color: 'red' });
 
     setSaving(true);
     try {
       const source =
         sourceKind === 'ai'
           ? { kind: 'ai' as const, topic: topic.trim(), tone: tone as any, length: length as any, withImage: insta.length > 0, imagePrompt: imagePrompt.trim() || undefined }
-          : { kind: 'uploaded' as const, items: uploads, cursor: 0 };
+          : sourceKind === 'rss'
+            ? { kind: 'rss' as const, feedUrl: feedUrl.trim(), rewriteWithAI }
+            : { kind: 'uploaded' as const, items: uploads, cursor: 0 };
       const r = await createAutomation({
         name: name.trim(),
         scheduleKind,
@@ -113,7 +127,7 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
       });
       if (r.ok) {
         notifications.show({ title: '자동화 생성', message: '정해진 일정마다 자동 발행됩니다 🤖', color: 'teal' });
-        setName(''); setTopic(''); setImagePrompt(''); setUploads([]); setInsta([]); setBlog([]); setTistory([]); setStartNow(false);
+        setName(''); setTopic(''); setImagePrompt(''); setUploads([]); setBulkUrls(''); setFeedUrl(''); setInsta([]); setBlog([]); setTistory([]); setStartNow(false);
         setShowForm(false);
         await refresh();
       } else {
@@ -209,11 +223,11 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                 fullWidth size="xs"
                 value={sourceKind}
                 onChange={(v) => setSourceKind(v as any)}
-                data={[{ label: 'AI 자동 생성', value: 'ai' }, { label: '내가 올린 항목', value: 'uploaded' }]}
+                data={[{ label: 'AI 생성', value: 'ai' }, { label: '내가 올린 항목', value: 'uploaded' }, { label: 'RSS 피드', value: 'rss' }]}
               />
             </Box>
 
-            {sourceKind === 'ai' ? (
+            {sourceKind === 'ai' && (
               <>
                 <Textarea label="AI가 쓸 주제" placeholder="예: 강아지와 함께하는 일상 팁" autosize minRows={2} value={topic} onChange={(e) => setTopic(e.currentTarget.value)} />
                 <Group grow>
@@ -222,10 +236,15 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                 </Group>
                 <TextInput label="이미지 설명 (선택)" placeholder="비우면 주제로 자동 생성" value={imagePrompt} onChange={(e) => setImagePrompt(e.currentTarget.value)} />
               </>
-            ) : (
+            )}
+
+            {sourceKind === 'uploaded' && (
               <Paper withBorder radius="sm" p="sm" bg="var(--mantine-color-gray-0)">
                 <Text size="xs" c="dimmed" mb="xs">발행할 항목을 순서대로 추가하세요. 매 회차 위에서부터 하나씩 사용합니다.</Text>
                 <Stack gap={6}>
+                  <Textarea size="xs" label="이미지 URL 여러 개 (줄바꿈으로 한 번에)" placeholder={'https://...\nhttps://...'} autosize minRows={2} value={bulkUrls} onChange={(e) => setBulkUrls(e.currentTarget.value)} />
+                  <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addBulk}>URL 일괄 추가</Button>
+                  <Divider my={4} label="또는 1개씩 상세 입력" labelPosition="center" />
                   <TextInput size="xs" label="이미지 URL (인스타)" value={u.imageUrl} onChange={(e) => setU({ ...u, imageUrl: e.currentTarget.value })} />
                   <TextInput size="xs" label="캡션/제목" value={u.caption || u.title} onChange={(e) => setU({ ...u, caption: e.currentTarget.value, title: e.currentTarget.value })} />
                   <Textarea size="xs" label="본문(블로그·티스토리, 선택)" autosize minRows={1} value={u.body} onChange={(e) => setU({ ...u, body: e.currentTarget.value })} />
@@ -233,15 +252,26 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                 </Stack>
                 {uploads.length > 0 && (
                   <Stack gap={4} mt="sm">
+                    <Text size="xs" fw={600} c="dimmed">추가된 항목 {uploads.length}개</Text>
                     {uploads.map((it, i) => (
                       <Group key={i} gap="xs" wrap="nowrap">
                         {it.imageUrl ? <Image src={it.imageUrl} w={36} h={36} radius="sm" fit="cover" /> : <IconPhoto size={20} />}
-                        <Text size="xs" truncate flex={1}>{it.caption || it.title || it.body?.slice(0, 30) || '(빈 항목)'}</Text>
+                        <Text size="xs" truncate flex={1}>{it.caption || it.title || it.imageUrl || it.body?.slice(0, 30) || '(빈 항목)'}</Text>
                         <ActionIcon size="sm" variant="subtle" color="red" onClick={() => setUploads((arr) => arr.filter((_, j) => j !== i))}><IconTrash size={14} /></ActionIcon>
                       </Group>
                     ))}
                   </Stack>
                 )}
+              </Paper>
+            )}
+
+            {sourceKind === 'rss' && (
+              <Paper withBorder radius="sm" p="sm" bg="var(--mantine-color-gray-0)">
+                <Text size="xs" c="dimmed" mb="xs">RSS/Atom 피드의 최신 글을 매 회차 자동으로 가져와 발행합니다(같은 글 중복 방지).</Text>
+                <Stack gap={6}>
+                  <TextInput size="xs" label="피드 주소" placeholder="https://블로그/feed 또는 .../rss" value={feedUrl} onChange={(e) => setFeedUrl(e.currentTarget.value)} />
+                  <Switch size="sm" label="AI로 SNS용 재작성(권장)" checked={rewriteWithAI} onChange={(e) => setRewriteWithAI(e.currentTarget.checked)} />
+                </Stack>
               </Paper>
             )}
 

@@ -5,6 +5,7 @@
 
 import { generateBlogPost, generateImage, deriveCaption } from '@amakers/ai';
 import { publishForUser } from '@/lib/publish-core';
+import { fetchFeedItems } from './rss';
 import type { AutomationHandler, AutomationTypeMeta, RunResult, ScheduledPublishConfig } from './types';
 
 /** 콘텐츠 소스 → 이번 회차 발행할 1건을 만든다. 확장 지점(드라이브/로컬 등). */
@@ -26,6 +27,41 @@ async function produceContent(
       else if (needImage) return { ok: false, error: '이미지 생성 실패: ' + (img.error || '') };
     }
     return { ok: true, title: post.title || src.topic.slice(0, 60), body: post.markdown || '', imageUrl };
+  }
+
+  if (src.kind === 'rss') {
+    if (!src.feedUrl?.trim()) return { ok: false, error: 'RSS 주소(feedUrl)가 없습니다' };
+    let items;
+    try {
+      items = await fetchFeedItems(src.feedUrl.trim());
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'RSS 가져오기 실패' };
+    }
+    if (!items.length) return { ok: false, skip: true, error: '피드에 항목이 없습니다' };
+    const newest = items[0];
+    if (src.lastSeenGuid && newest.guid === src.lastSeenGuid) {
+      return { ok: false, skip: true, error: '새 항목이 없습니다' };
+    }
+    let title = newest.title || '새 소식';
+    let body = newest.summary || '';
+    if (src.rewriteWithAI) {
+      const post = await generateBlogPost(userId, {
+        topic: `다음 글감을 SNS 게시용으로 자연스럽고 매력적으로 한국어 재작성:\n제목: ${newest.title}\n내용: ${(newest.summary || '').slice(0, 800)}`,
+        length: 'short',
+      });
+      if (post.ok) {
+        title = post.title || title;
+        body = post.markdown || body;
+      }
+    }
+    if (newest.link) body = `${body}\n\n원문: ${newest.link}`;
+    let imageUrl: string | undefined;
+    if (needImage) {
+      const img = await generateImage(newest.title || title, 'square');
+      if (img.ok) imageUrl = img.url;
+      else return { ok: false, error: '이미지 생성 실패: ' + (img.error || '') };
+    }
+    return { ok: true, title, body, imageUrl, configPatch: { source: { ...src, lastSeenGuid: newest.guid } } };
   }
 
   if (src.kind === 'uploaded') {
@@ -97,6 +133,6 @@ export const AUTOMATION_TYPES: AutomationTypeMeta[] = [
   {
     type: 'scheduled_publish',
     label: '예약 자동 발행',
-    description: '정해진 주기마다 소스(AI 생성/업로드 등)로 글·이미지를 만들어 선택한 채널에 자동 발행',
+    description: '정해진 주기/시각마다 소스(AI 생성·업로드 항목·RSS 피드)로 글·이미지를 만들어 선택 채널에 자동 발행',
   },
 ];

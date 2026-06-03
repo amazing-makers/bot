@@ -53,6 +53,8 @@ function validateChannels(cfg: ScheduledPublishConfig): string | null {
   const total = (ch.instaIds?.length || 0) + (ch.blogIds?.length || 0) + (ch.tistoryIds?.length || 0);
   if (total === 0) return '발행할 채널을 1개 이상 선택하세요';
   if (cfg?.source?.kind === 'ai' && !cfg.source.topic?.trim()) return 'AI 소스에는 주제가 필요합니다';
+  if (cfg?.source?.kind === 'rss' && !cfg.source.feedUrl?.trim()) return 'RSS 소스에는 피드 주소가 필요합니다';
+  if (cfg?.source?.kind === 'uploaded' && !(cfg.source.items && cfg.source.items.length)) return '업로드 항목을 1개 이상 추가하세요';
   return null;
 }
 
