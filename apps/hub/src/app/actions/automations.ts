@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@amakers/db';
-import { runAutomationById } from '@/lib/automation/run';
+import { runAutomationById, computeNext } from '@/lib/automation/run';
 import { AUTOMATION_TYPES } from '@/lib/automation/handlers';
 import type { ScheduledPublishConfig } from '@/lib/automation/types';
 
@@ -17,7 +17,9 @@ async function requireUserId(): Promise<string> {
 export interface CreateAutomationInput {
   name: string;
   type?: string; // 기본 scheduled_publish
-  intervalMinutes: number;
+  scheduleKind?: 'interval' | 'daily'; // 기본 interval
+  intervalMinutes?: number; // interval 일 때
+  dailyTime?: string; // daily 일 때 "HH:MM" (KST)
   config: ScheduledPublishConfig;
   startNow?: boolean;
 }
@@ -27,13 +29,23 @@ export interface AutomationListItem {
   name: string;
   type: string;
   status: string;
+  scheduleKind: string;
   intervalMinutes: number | null;
+  dailyTime: string | null;
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: string | null;
   lastError: string | null;
   runCount: number;
   config: any;
+}
+
+export interface AutomationRunItem {
+  id: string;
+  status: string;
+  summary: string | null;
+  error: string | null;
+  startedAt: string;
 }
 
 function validateChannels(cfg: ScheduledPublishConfig): string | null {
@@ -48,8 +60,20 @@ export async function createAutomation(input: CreateAutomationInput): Promise<{ 
   const userId = await requireUserId();
   const name = (input.name || '').trim();
   if (!name) return { ok: false, error: '이름을 입력하세요' };
-  const interval = Math.max(5, Math.floor(input.intervalMinutes || 0));
-  if (!interval) return { ok: false, error: '실행 주기를 입력하세요(분)' };
+
+  const scheduleKind = input.scheduleKind === 'daily' ? 'daily' : 'interval';
+  let interval = 0;
+  let dailyTime: string | null = null;
+  if (scheduleKind === 'daily') {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((input.dailyTime || '').trim());
+    if (!m) return { ok: false, error: '매일 실행할 시각을 HH:MM 형식으로 입력하세요' };
+    const hh = Math.min(23, parseInt(m[1], 10));
+    const mm = Math.min(59, parseInt(m[2], 10));
+    dailyTime = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  } else {
+    interval = Math.max(5, Math.floor(input.intervalMinutes || 0));
+    if (!interval) return { ok: false, error: '실행 주기를 입력하세요(분)' };
+  }
 
   const type = input.type || 'scheduled_publish';
   if (!AUTOMATION_TYPES.some((t) => t.type === type)) return { ok: false, error: '지원하지 않는 자동화 유형입니다' };
@@ -73,7 +97,8 @@ export async function createAutomation(input: CreateAutomationInput): Promise<{ 
   }
 
   const now = new Date();
-  const nextRunAt = input.startNow ? now : new Date(now.getTime() + interval * 60_000);
+  const scheduled = computeNext(now, { scheduleKind, intervalMinutes: interval || null, cronExpr: dailyTime });
+  const nextRunAt = input.startNow ? now : scheduled;
 
   const created = await prisma.automation.create({
     data: {
@@ -81,8 +106,9 @@ export async function createAutomation(input: CreateAutomationInput): Promise<{ 
       name,
       type,
       status: 'ACTIVE',
-      scheduleKind: 'interval',
-      intervalMinutes: interval,
+      scheduleKind,
+      intervalMinutes: scheduleKind === 'interval' ? interval : null,
+      cronExpr: dailyTime,
       config: config as any,
       nextRunAt,
     },
@@ -100,13 +126,34 @@ export async function listAutomations(): Promise<AutomationListItem[]> {
     name: a.name,
     type: a.type,
     status: a.status,
+    scheduleKind: a.scheduleKind,
     intervalMinutes: a.intervalMinutes,
+    dailyTime: a.scheduleKind === 'daily' ? a.cronExpr : null,
     nextRunAt: a.nextRunAt ? a.nextRunAt.toISOString() : null,
     lastRunAt: a.lastRunAt ? a.lastRunAt.toISOString() : null,
     lastStatus: a.lastStatus,
     lastError: a.lastError,
     runCount: a.runCount,
     config: a.config,
+  }));
+}
+
+/** 한 자동화의 최근 실행 이력. */
+export async function getAutomationRuns(automationId: string, limit = 20): Promise<AutomationRunItem[]> {
+  const userId = await requireUserId();
+  const owned = await prisma.automation.findFirst({ where: { id: automationId, userId }, select: { id: true } });
+  if (!owned) return [];
+  const runs = await prisma.automationRun.findMany({
+    where: { automationId, userId },
+    orderBy: { startedAt: 'desc' },
+    take: limit,
+  });
+  return runs.map((r) => ({
+    id: r.id,
+    status: r.status,
+    summary: r.summary,
+    error: r.error,
+    startedAt: r.startedAt.toISOString(),
   }));
 }
 

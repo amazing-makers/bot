@@ -45,10 +45,12 @@ const TOOLS: AgentToolDef[] = [
   },
   {
     name: 'create_automation',
-    description: '반복 자동화를 만든다(예: "3시간마다 ~ 자동 발행"). 주기마다 AI가 글·이미지를 생성해 선택 채널에 자동 발행. 만들기 전에 list_accounts 로 계정 id 를 확보한다.',
+    description: '반복 자동화를 만든다(예: "3시간마다" 또는 "매일 아침 9시"). 주기마다 AI가 글·이미지를 생성해 선택 채널에 자동 발행. 만들기 전에 list_accounts 로 계정 id 를 확보한다.',
     params: {
       name: '자동화 이름(예: "3시간마다 강아지 인스타")',
-      intervalMinutes: '실행 주기(분). 예: 3시간=180, 하루=1440',
+      scheduleKind: 'interval(주기 반복) 또는 daily(매일 정시). 기본 interval',
+      intervalMinutes: 'interval 일 때 주기(분). 예: 3시간=180',
+      dailyTime: 'daily 일 때 KST 시각 "HH:MM". 예: 아침 9시="09:00"',
       topic: 'AI가 생성할 글 주제(필수)',
       tone: 'info|guide|review|friendly (선택)',
       length: 'short|medium|long (선택)',
@@ -124,9 +126,12 @@ function buildExecute(userId: string) {
           },
           channels: { instaIds: arr(args?.instaIds), blogIds: arr(args?.blogIds), tistoryIds: arr(args?.tistoryIds) },
         };
+        const isDaily = args?.scheduleKind === 'daily' || (!!args?.dailyTime && !args?.intervalMinutes);
         const r = await createAutomation({
           name: String(args?.name || '자동 발행'),
-          intervalMinutes: Number(args?.intervalMinutes) || 180,
+          scheduleKind: isDaily ? 'daily' : 'interval',
+          intervalMinutes: isDaily ? undefined : Number(args?.intervalMinutes) || 180,
+          dailyTime: isDaily ? String(args?.dailyTime || '09:00') : undefined,
           config,
           startNow: !!args?.startNow,
         });

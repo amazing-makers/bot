@@ -3,15 +3,16 @@
 import { useState, useTransition } from 'react';
 import {
   Paper, Stack, Group, Text, Button, TextInput, Textarea, Select, MultiSelect, NumberInput,
-  Badge, ActionIcon, Divider, Switch, Box, Alert,
+  Badge, ActionIcon, Divider, Switch, Box, Alert, SegmentedControl, Modal, Image, ScrollArea, Loader,
 } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import {
-  IconPlus, IconPlayerPlay, IconTrash, IconPlayerPause, IconBolt, IconClock, IconAlertCircle,
+  IconPlus, IconPlayerPlay, IconTrash, IconPlayerPause, IconBolt, IconClock, IconAlertCircle, IconHistory, IconPhoto,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import {
-  createAutomation, setAutomationPaused, deleteAutomation, runAutomationNow,
-  type AutomationListItem,
+  createAutomation, setAutomationPaused, deleteAutomation, runAutomationNow, getAutomationRuns,
+  type AutomationListItem, type AutomationRunItem,
 } from '@/app/actions/automations';
 
 type Accounts = {
@@ -19,6 +20,8 @@ type Accounts = {
   blog: { id: string; label: string }[];
   tistory: { id: string; label: string }[];
 };
+
+type UploadItem = { imageUrl: string; caption: string; title: string; body: string };
 
 const INTERVAL_PRESETS = [
   { label: '1시간', value: 60 },
@@ -41,23 +44,39 @@ function statusColor(s: string | null): string {
   return s === 'SUCCESS' ? 'teal' : s === 'FAILED' ? 'red' : s === 'SKIPPED' ? 'yellow' : 'gray';
 }
 
+function scheduleLabel(it: AutomationListItem): string {
+  if (it.scheduleKind === 'daily') return `매일 ${it.dailyTime || '09:00'}`;
+  if (it.scheduleKind === 'once') return '1회';
+  return `${it.intervalMinutes}분마다`;
+}
+
 export function AutomationsManager({ accounts, initial }: { accounts: Accounts; initial: AutomationListItem[] }) {
   const [items, setItems] = useState<AutomationListItem[]>(initial);
   const [showForm, setShowForm] = useState(initial.length === 0);
   const [pending, startTransition] = useTransition();
 
-  // form state
+  // ── 폼 상태 ──
   const [name, setName] = useState('');
+  const [scheduleKind, setScheduleKind] = useState<'interval' | 'daily'>('interval');
   const [interval, setInterval] = useState<number>(180);
+  const [dailyTime, setDailyTime] = useState('09:00');
+  const [sourceKind, setSourceKind] = useState<'ai' | 'uploaded'>('ai');
   const [topic, setTopic] = useState('');
   const [tone, setTone] = useState<string>('info');
   const [length, setLength] = useState<string>('medium');
   const [imagePrompt, setImagePrompt] = useState('');
+  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [u, setU] = useState<UploadItem>({ imageUrl: '', caption: '', title: '', body: '' });
   const [insta, setInsta] = useState<string[]>([]);
   const [blog, setBlog] = useState<string[]>([]);
   const [tistory, setTistory] = useState<string[]>([]);
   const [startNow, setStartNow] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // ── 실행 이력 모달 ──
+  const [histOpen, histCtl] = useDisclosure(false);
+  const [histTitle, setHistTitle] = useState('');
+  const [histRuns, setHistRuns] = useState<AutomationRunItem[] | null>(null);
 
   const hasAnyAccount = accounts.instagram.length + accounts.blog.length + accounts.tistory.length > 0;
 
@@ -66,24 +85,35 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
     setItems(await listAutomations());
   }
 
+  function addUpload() {
+    if (!u.imageUrl.trim() && !u.body.trim()) return notifications.show({ message: '이미지 URL 또는 본문을 입력하세요', color: 'red' });
+    setUploads((arr) => [...arr, { ...u }]);
+    setU({ imageUrl: '', caption: '', title: '', body: '' });
+  }
+
   async function submit() {
     if (!name.trim()) return notifications.show({ message: '이름을 입력하세요', color: 'red' });
-    if (!topic.trim()) return notifications.show({ message: 'AI가 쓸 주제를 입력하세요', color: 'red' });
     if (insta.length + blog.length + tistory.length === 0) return notifications.show({ message: '채널을 1개 이상 선택하세요', color: 'red' });
+    if (sourceKind === 'ai' && !topic.trim()) return notifications.show({ message: 'AI가 쓸 주제를 입력하세요', color: 'red' });
+    if (sourceKind === 'uploaded' && uploads.length === 0) return notifications.show({ message: '업로드 항목을 1개 이상 추가하세요', color: 'red' });
+
     setSaving(true);
     try {
+      const source =
+        sourceKind === 'ai'
+          ? { kind: 'ai' as const, topic: topic.trim(), tone: tone as any, length: length as any, withImage: insta.length > 0, imagePrompt: imagePrompt.trim() || undefined }
+          : { kind: 'uploaded' as const, items: uploads, cursor: 0 };
       const r = await createAutomation({
         name: name.trim(),
-        intervalMinutes: interval,
+        scheduleKind,
+        intervalMinutes: scheduleKind === 'interval' ? interval : undefined,
+        dailyTime: scheduleKind === 'daily' ? dailyTime : undefined,
         startNow,
-        config: {
-          source: { kind: 'ai', topic: topic.trim(), tone: tone as any, length: length as any, withImage: insta.length > 0, imagePrompt: imagePrompt.trim() || undefined },
-          channels: { instaIds: insta, blogIds: blog, tistoryIds: tistory },
-        },
+        config: { source, channels: { instaIds: insta, blogIds: blog, tistoryIds: tistory } },
       });
       if (r.ok) {
-        notifications.show({ title: '자동화 생성', message: '주기마다 자동 발행됩니다 🤖', color: 'teal' });
-        setName(''); setTopic(''); setImagePrompt(''); setInsta([]); setBlog([]); setTistory([]); setStartNow(false);
+        notifications.show({ title: '자동화 생성', message: '정해진 일정마다 자동 발행됩니다 🤖', color: 'teal' });
+        setName(''); setTopic(''); setImagePrompt(''); setUploads([]); setInsta([]); setBlog([]); setTistory([]); setStartNow(false);
         setShowForm(false);
         await refresh();
       } else {
@@ -123,6 +153,13 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
     });
   }
 
+  function openHistory(it: AutomationListItem) {
+    setHistTitle(it.name);
+    setHistRuns(null);
+    histCtl.open();
+    getAutomationRuns(it.id).then(setHistRuns).catch(() => setHistRuns([]));
+  }
+
   return (
     <Stack>
       <Group justify="space-between">
@@ -140,24 +177,74 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
             </Alert>
           )}
           <Stack gap="sm">
-            <TextInput label="이름" placeholder="예: 3시간마다 강아지 인스타" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
+            <TextInput label="이름" placeholder="예: 매일 아침 강아지 인스타" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
+
+            {/* 스케줄 */}
             <Box>
-              <Text size="sm" fw={500} mb={4}>실행 주기</Text>
-              <Group gap="xs">
-                {INTERVAL_PRESETS.map((p) => (
-                  <Button key={p.value} size="xs" variant={interval === p.value ? 'filled' : 'default'} radius="xl" onClick={() => setInterval(p.value)}>
-                    {p.label}
-                  </Button>
-                ))}
-                <NumberInput size="xs" w={120} min={5} suffix="분" value={interval} onChange={(v) => setInterval(Number(v) || 60)} />
-              </Group>
+              <Text size="sm" fw={500} mb={4}>언제 실행할까요?</Text>
+              <SegmentedControl
+                fullWidth size="xs" mb="xs"
+                value={scheduleKind}
+                onChange={(v) => setScheduleKind(v as any)}
+                data={[{ label: '주기 반복', value: 'interval' }, { label: '매일 정해진 시각', value: 'daily' }]}
+              />
+              {scheduleKind === 'interval' ? (
+                <Group gap="xs">
+                  {INTERVAL_PRESETS.map((p) => (
+                    <Button key={p.value} size="xs" variant={interval === p.value ? 'filled' : 'default'} radius="xl" onClick={() => setInterval(p.value)}>
+                      {p.label}
+                    </Button>
+                  ))}
+                  <NumberInput size="xs" w={120} min={5} suffix="분" value={interval} onChange={(v) => setInterval(Number(v) || 60)} />
+                </Group>
+              ) : (
+                <TextInput w={140} placeholder="09:00" label="매일 (KST)" value={dailyTime} onChange={(e) => setDailyTime(e.currentTarget.value)} />
+              )}
             </Box>
-            <Textarea label="AI가 쓸 주제" placeholder="예: 강아지와 함께하는 일상 팁" autosize minRows={2} value={topic} onChange={(e) => setTopic(e.currentTarget.value)} required />
-            <Group grow>
-              <Select label="톤" data={[{ value: 'info', label: '정보' }, { value: 'guide', label: '가이드' }, { value: 'review', label: '리뷰' }, { value: 'friendly', label: '친근' }]} value={tone} onChange={(v) => setTone(v || 'info')} />
-              <Select label="길이" data={[{ value: 'short', label: '짧게' }, { value: 'medium', label: '보통' }, { value: 'long', label: '길게' }]} value={length} onChange={(v) => setLength(v || 'medium')} />
-            </Group>
-            <TextInput label="이미지 설명 (선택)" placeholder="비우면 주제로 자동 생성" value={imagePrompt} onChange={(e) => setImagePrompt(e.currentTarget.value)} />
+
+            {/* 콘텐츠 소스 */}
+            <Box>
+              <Text size="sm" fw={500} mb={4}>무엇을 발행할까요?</Text>
+              <SegmentedControl
+                fullWidth size="xs"
+                value={sourceKind}
+                onChange={(v) => setSourceKind(v as any)}
+                data={[{ label: 'AI 자동 생성', value: 'ai' }, { label: '내가 올린 항목', value: 'uploaded' }]}
+              />
+            </Box>
+
+            {sourceKind === 'ai' ? (
+              <>
+                <Textarea label="AI가 쓸 주제" placeholder="예: 강아지와 함께하는 일상 팁" autosize minRows={2} value={topic} onChange={(e) => setTopic(e.currentTarget.value)} />
+                <Group grow>
+                  <Select label="톤" data={[{ value: 'info', label: '정보' }, { value: 'guide', label: '가이드' }, { value: 'review', label: '리뷰' }, { value: 'friendly', label: '친근' }]} value={tone} onChange={(v) => setTone(v || 'info')} />
+                  <Select label="길이" data={[{ value: 'short', label: '짧게' }, { value: 'medium', label: '보통' }, { value: 'long', label: '길게' }]} value={length} onChange={(v) => setLength(v || 'medium')} />
+                </Group>
+                <TextInput label="이미지 설명 (선택)" placeholder="비우면 주제로 자동 생성" value={imagePrompt} onChange={(e) => setImagePrompt(e.currentTarget.value)} />
+              </>
+            ) : (
+              <Paper withBorder radius="sm" p="sm" bg="var(--mantine-color-gray-0)">
+                <Text size="xs" c="dimmed" mb="xs">발행할 항목을 순서대로 추가하세요. 매 회차 위에서부터 하나씩 사용합니다.</Text>
+                <Stack gap={6}>
+                  <TextInput size="xs" label="이미지 URL (인스타)" value={u.imageUrl} onChange={(e) => setU({ ...u, imageUrl: e.currentTarget.value })} />
+                  <TextInput size="xs" label="캡션/제목" value={u.caption || u.title} onChange={(e) => setU({ ...u, caption: e.currentTarget.value, title: e.currentTarget.value })} />
+                  <Textarea size="xs" label="본문(블로그·티스토리, 선택)" autosize minRows={1} value={u.body} onChange={(e) => setU({ ...u, body: e.currentTarget.value })} />
+                  <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addUpload}>항목 추가</Button>
+                </Stack>
+                {uploads.length > 0 && (
+                  <Stack gap={4} mt="sm">
+                    {uploads.map((it, i) => (
+                      <Group key={i} gap="xs" wrap="nowrap">
+                        {it.imageUrl ? <Image src={it.imageUrl} w={36} h={36} radius="sm" fit="cover" /> : <IconPhoto size={20} />}
+                        <Text size="xs" truncate flex={1}>{it.caption || it.title || it.body?.slice(0, 30) || '(빈 항목)'}</Text>
+                        <ActionIcon size="sm" variant="subtle" color="red" onClick={() => setUploads((arr) => arr.filter((_, j) => j !== i))}><IconTrash size={14} /></ActionIcon>
+                      </Group>
+                    ))}
+                  </Stack>
+                )}
+              </Paper>
+            )}
+
             <Divider label="발행 채널" labelPosition="left" />
             {accounts.instagram.length > 0 && (
               <MultiSelect label="인스타그램" data={accounts.instagram.map((a) => ({ value: a.id, label: a.label }))} value={insta} onChange={setInsta} placeholder="계정 선택" />
@@ -195,27 +282,45 @@ export function AutomationsManager({ accounts, initial }: { accounts: Accounts; 
                   )}
                 </Group>
                 <Group gap="lg">
-                  <Text size="xs" c="dimmed"><IconClock size={12} style={{ verticalAlign: -1 }} /> {it.intervalMinutes}분마다</Text>
+                  <Text size="xs" c="dimmed"><IconClock size={12} style={{ verticalAlign: -1 }} /> {scheduleLabel(it)}</Text>
                   <Text size="xs" c="dimmed">다음: {fmt(it.nextRunAt)}</Text>
                   <Text size="xs" c="dimmed">실행 {it.runCount}회</Text>
                 </Group>
                 {it.lastError && <Text size="xs" c="red" mt={4} lineClamp={2}>오류: {it.lastError}</Text>}
               </Box>
               <Group gap={6} wrap="nowrap">
-                <ActionIcon variant="light" color="blue" onClick={() => runNow(it)} loading={pending} title="지금 실행">
-                  <IconPlayerPlay size={16} />
-                </ActionIcon>
-                <ActionIcon variant="light" color="gray" onClick={() => togglePause(it)} loading={pending} title={it.status === 'ACTIVE' ? '일시정지' : '재개'}>
-                  <IconPlayerPause size={16} />
-                </ActionIcon>
-                <ActionIcon variant="light" color="red" onClick={() => remove(it)} loading={pending} title="삭제">
-                  <IconTrash size={16} />
-                </ActionIcon>
+                <ActionIcon variant="light" color="grape" onClick={() => openHistory(it)} title="실행 이력"><IconHistory size={16} /></ActionIcon>
+                <ActionIcon variant="light" color="blue" onClick={() => runNow(it)} loading={pending} title="지금 실행"><IconPlayerPlay size={16} /></ActionIcon>
+                <ActionIcon variant="light" color="gray" onClick={() => togglePause(it)} loading={pending} title={it.status === 'ACTIVE' ? '일시정지' : '재개'}><IconPlayerPause size={16} /></ActionIcon>
+                <ActionIcon variant="light" color="red" onClick={() => remove(it)} loading={pending} title="삭제"><IconTrash size={16} /></ActionIcon>
               </Group>
             </Group>
           </Paper>
         ))
       )}
+
+      <Modal opened={histOpen} onClose={histCtl.close} title={`실행 이력 — ${histTitle}`} size="md">
+        {histRuns === null ? (
+          <Group justify="center" py="lg"><Loader size="sm" /></Group>
+        ) : histRuns.length === 0 ? (
+          <Text c="dimmed" size="sm" ta="center" py="lg">아직 실행 기록이 없어요.</Text>
+        ) : (
+          <ScrollArea h={360}>
+            <Stack gap="xs">
+              {histRuns.map((r) => (
+                <Paper key={r.id} withBorder radius="sm" p="xs">
+                  <Group justify="space-between" gap="xs">
+                    <Badge size="sm" variant="light" color={statusColor(r.status)}>{r.status}</Badge>
+                    <Text size="xs" c="dimmed">{fmt(r.startedAt)}</Text>
+                  </Group>
+                  {r.summary && <Text size="xs" mt={4}>{r.summary}</Text>}
+                  {r.error && <Text size="xs" c="red" mt={4}>{r.error}</Text>}
+                </Paper>
+              ))}
+            </Stack>
+          </ScrollArea>
+        )}
+      </Modal>
     </Stack>
   );
 }
