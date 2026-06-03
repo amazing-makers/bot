@@ -8,7 +8,12 @@ import { put } from '@vercel/blob';
 import { getUserApiKey } from './api-keys';
 import type { ImageRatio } from './image';
 
-const GEMINI_IMAGE_MODEL = 'gemini-2.0-flash-preview-image-generation';
+// 무료/프리뷰에서 모델명이 자주 바뀌므로 여러 후보를 순차 시도.
+const GEMINI_IMAGE_MODELS = [
+  'gemini-2.5-flash-image-preview',
+  'gemini-2.0-flash-preview-image-generation',
+  'gemini-2.0-flash-exp',
+];
 const RATIO_HINT: Record<ImageRatio, string> = {
   square: '정사각형(1:1)',
   portrait: '세로(4:5)',
@@ -35,37 +40,45 @@ export async function generateImageHosted(userId: string, prompt: string, ratio:
     return { ok: false, error: '이미지 저장소(Blob)가 설정되지 않았습니다.' };
   }
 
-  try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `다음을 고품질 사진 이미지로 생성: ${p}. 비율 ${RATIO_HINT[ratio]}.` }] }],
-        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
-    if (!r.ok) {
-      const body = (await r.text()).slice(0, 200);
-      if (/quota|RESOURCE_EXHAUSTED|\b429\b/i.test(body)) return { ok: false, error: 'Gemini 무료 사용량 초과 — 잠시 후 다시 시도하세요.' };
-      return { ok: false, error: `이미지 생성 실패 (Gemini ${r.status})` };
-    }
-    const data = await r.json();
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    const img = parts.find((x: any) => x?.inlineData?.data);
-    if (!img) return { ok: false, error: '이미지 응답이 비어있어요 — 다시 시도하세요.' };
+  const text = `다음을 고품질 사진 이미지로 생성: ${p}. 비율 ${RATIO_HINT[ratio]}.`;
+  let lastErr = '알 수 없는 오류';
+  for (const model of GEMINI_IMAGE_MODELS) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text }] }],
+          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!r.ok) {
+        const body = (await r.text()).slice(0, 300);
+        if (/quota|RESOURCE_EXHAUSTED|\b429\b/i.test(body)) return { ok: false, error: 'Gemini 무료 사용량 초과 — 잠시 후 다시 시도하세요.' };
+        lastErr = `${model} → ${r.status}: ${body.replace(/\s+/g, ' ').slice(0, 140)}`;
+        if (r.status === 404 || r.status === 400) continue; // 모델 없음/형식 → 다음 모델
+        return { ok: false, error: `이미지 생성 실패 — ${lastErr}` };
+      }
+      const data = await r.json();
+      const parts = data?.candidates?.[0]?.content?.parts || [];
+      const img = parts.find((x: any) => x?.inlineData?.data);
+      if (!img) { lastErr = `${model} → 이미지 파트 없음`; continue; }
 
-    const buf = Buffer.from(img.inlineData.data, 'base64');
-    const mime = img.inlineData.mimeType || 'image/png';
-    const ext = mime.includes('jpeg') ? 'jpg' : 'png';
-    const blob = await put(`ai-images/${userId}/${Date.now()}.${ext}`, buf, {
-      access: 'public',
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-      contentType: mime,
-      addRandomSuffix: true,
-    });
-    return { ok: true, url: blob.url };
-  } catch (e: any) {
-    return { ok: false, error: e?.name === 'TimeoutError' ? '이미지 생성 시간 초과 — 다시 시도하세요.' : (e?.message || '이미지 생성 오류') };
+      const buf = Buffer.from(img.inlineData.data, 'base64');
+      const mime = img.inlineData.mimeType || 'image/png';
+      const ext = mime.includes('jpeg') ? 'jpg' : 'png';
+      const blob = await put(`ai-images/${userId}/${Date.now()}.${ext}`, buf, {
+        access: 'public',
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+        contentType: mime,
+        addRandomSuffix: true,
+      });
+      return { ok: true, url: blob.url };
+    } catch (e: any) {
+      if (e?.name === 'TimeoutError') return { ok: false, error: '이미지 생성 시간 초과 — 다시 시도하세요.' };
+      lastErr = e?.message || '오류';
+    }
   }
+  return { ok: false, error: `이미지 생성 실패 — ${lastErr}` };
 }

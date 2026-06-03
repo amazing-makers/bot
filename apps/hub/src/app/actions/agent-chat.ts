@@ -192,12 +192,17 @@ export async function agentChat(
 
   let draft: AgentDraft | undefined;
   let proposal: PublishToChannelsInput | undefined;
+  let reply = res.reply;
   for (const ev of res.events) {
     if (ev.tool === 'generate_post' && ev.result?.ok) {
       draft = { ...(draft || {}), title: ev.result.title, markdown: ev.result.markdown };
     }
-    if (ev.tool === 'generate_image' && ev.result?.ok) {
-      draft = { ...(draft || {}), imageUrl: ev.result.url };
+    if (ev.tool === 'generate_image') {
+      if (ev.result?.ok) draft = { ...(draft || {}), imageUrl: ev.result.url };
+      else if (ev.result?.error) reply = `${reply}\n\n🖼️ 이미지 오류: ${ev.result.error}`;
+    }
+    if (ev.tool === 'generate_post' && ev.result && !ev.result.ok && ev.result.error) {
+      reply = `${reply}\n\n📝 글 오류: ${ev.result.error}`;
     }
     if (ev.tool === 'propose_publish' && ev.result?.ok) {
       proposal = ev.result.proposal;
@@ -208,7 +213,7 @@ export async function agentChat(
     draft = { ...(draft || {}), imageUrl: draft?.imageUrl || attached };
     if (proposal && !proposal.imageUrl) proposal = { ...proposal, imageUrl: attached };
   }
-  return { ok: true, reply: res.reply, draft, proposal };
+  return { ok: true, reply, draft, proposal };
 }
 
 /** 사용자가 화면에서 "발행" 확정 → 실제 다채널 발행. */
