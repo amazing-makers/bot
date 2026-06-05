@@ -12,7 +12,8 @@
  *   - 에러에 status(HTTP) / fbCode(Graph API error.code) 부착 → 호출부가 토큰만료(190) 등 분기.
  */
 
-const GRAPH_API = 'https://graph.facebook.com/v21.0';
+// Instagram 로그인(Instagram API with Instagram Login) 토큰은 graph.instagram.com 사용.
+const GRAPH_API = 'https://graph.instagram.com/v21.0';
 const IG_CAPTION_LIMIT = 2200;
 
 export interface InstagramCredentials {

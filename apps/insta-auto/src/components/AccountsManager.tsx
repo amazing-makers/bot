@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from 'react';
 import {
     Card, Stack, Group, Text, Badge, Button, TextInput, Paper, ThemeIcon, Box, Alert, Anchor, List,
 } from '@mantine/core';
-import { IconBrandInstagram, IconTrash, IconPlus, IconInfoCircle, IconAlertCircle, IconBrandFacebook } from '@tabler/icons-react';
+import { IconBrandInstagram, IconTrash, IconPlus, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { connectAccountAction, deleteAccountAction } from '@/app/actions/accounts';
 
@@ -66,18 +66,18 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountI
 
     return (
         <Stack gap="lg">
-            {/* 간편 연결 — 페이스북 로그인(OAuth). 고객은 로그인만 하면 됨. */}
+            {/* 간편 연결 — Instagram 로그인(OAuth). 페이스북 불필요, 고객은 인스타 로그인만. */}
             <Paper withBorder p="md" radius="md" bg="grape.0">
                 <Group justify="space-between" wrap="nowrap">
                     <Group gap="sm" wrap="nowrap">
-                        <ThemeIcon variant="filled" color="blue" size={40} radius="md"><IconBrandFacebook size={22} /></ThemeIcon>
+                        <ThemeIcon variant="gradient" gradient={{ from: 'grape', to: 'pink' }} size={40} radius="md"><IconBrandInstagram size={22} /></ThemeIcon>
                         <Box>
-                            <Text fw={700} size="sm">간편 연결 (추천)</Text>
-                            <Text size="xs" c="dimmed">페이스북으로 로그인하면 비즈니스 인스타가 자동 연결됩니다. (비즈니스 계정 + 페이지 연결 필요)</Text>
+                            <Text fw={700} size="sm">인스타그램으로 연결 (추천)</Text>
+                            <Text size="xs" c="dimmed">인스타 계정으로 로그인만 하면 자동 연결됩니다. 페이스북 불필요. (비즈니스/크리에이터 계정 필요)</Text>
                         </Box>
                     </Group>
-                    <Button component="a" href="/api/connect/instagram" color="blue" leftSection={<IconBrandFacebook size={18} />}>
-                        페이스북으로 연결
+                    <Button component="a" href="/api/connect/instagram" variant="gradient" gradient={{ from: 'grape', to: 'pink' }} leftSection={<IconBrandInstagram size={18} />}>
+                        인스타그램으로 연결
                     </Button>
                 </Group>
             </Paper>
