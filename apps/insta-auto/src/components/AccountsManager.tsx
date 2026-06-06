@@ -76,7 +76,7 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountI
                             <Text size="xs" c="dimmed">인스타 계정으로 로그인만 하면 자동 연결됩니다. 페이스북 불필요. (비즈니스/크리에이터 계정 필요)</Text>
                         </Box>
                     </Group>
-                    <Button component="a" href="/api/connect/instagram" variant="gradient" gradient={{ from: 'grape', to: 'pink' }} leftSection={<IconBrandInstagram size={18} />}>
+                    <Button component="a" href="/api/connect/instagram" target="_blank" rel="noopener noreferrer" variant="gradient" gradient={{ from: 'grape', to: 'pink' }} leftSection={<IconBrandInstagram size={18} />}>
                         인스타그램으로 연결
                     </Button>
                 </Group>
