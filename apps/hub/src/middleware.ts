@@ -9,5 +9,5 @@ import { buildAuthConfig } from '@amakers/auth/config';
 export default NextAuth(buildAuthConfig()).auth;
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|login|signup).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|login|signup|privacy|terms|data-deletion).*)'],
 };
