@@ -1,0 +1,17 @@
+{
+  "name": "naver-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "네이버 블로그 발행 에이전트 — 큐를 폴링해 네이버 세션으로 스마트에디터에 자동 발행",
+  "scripts": {
+    "login": "node agent.mjs login",
+    "start": "node agent.mjs start",
+    "once": "node agent.mjs once"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "playwright": "^1.49.0"
+  },
+  "engines": { "node": ">=20.0.0" }
+}
