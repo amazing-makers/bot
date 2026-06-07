@@ -42,6 +42,22 @@ export async function connectWordPress(
     return { ok: true, accountId: account.id, username: verified.username || creds.username };
 }
 
+/** 네이버 블로그 연결 — 자격증명 없이 blogId만(실제 발행은 데스크톱 에이전트 세션). */
+export async function connectNaver(
+    userId: string,
+    blogId: string,
+): Promise<{ ok: boolean; accountId?: string; username?: string; error?: string }> {
+    const id = blogId.trim().replace(/^@/, '').replace(/^https?:\/\/blog\.naver\.com\//, '').replace(/\/.*$/, '');
+    if (!id) return { ok: false, error: '네이버 블로그 ID를 입력하세요' };
+    const siteUrl = `https://blog.naver.com/${id}`;
+    const account = await prisma.blogAccount.upsert({
+        where: { userId_provider_siteUrl: { userId, provider: 'NAVER', siteUrl } },
+        update: { username: id, status: 'ACTIVE' },
+        create: { userId, provider: 'NAVER', siteUrl, username: id, encryptedSecret: encrypt('agent-session'), status: 'ACTIVE' },
+    });
+    return { ok: true, accountId: account.id, username: id };
+}
+
 /** 사용자 계정 목록 (자격증명 미반환). */
 export async function listAccounts(userId: string) {
     return prisma.blogAccount.findMany({

@@ -111,7 +111,8 @@ export interface DispatchSummary { processed: number; succeeded: number; failed:
 export async function dispatchDueScheduled(limit = 20): Promise<DispatchSummary> {
     const now = new Date();
     const due = await prisma.blogPost.findMany({
-        where: { status: 'SCHEDULED', scheduledAt: { lte: now } },
+        // 워드프레스(API)만 cron 발행. 네이버(NAVER)는 데스크톱 에이전트가 폴링·발행.
+        where: { status: 'SCHEDULED', scheduledAt: { lte: now }, account: { provider: 'WORDPRESS' } },
         orderBy: { scheduledAt: 'asc' },
         take: limit,
         select: { id: true },
